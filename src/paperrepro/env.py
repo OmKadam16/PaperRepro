@@ -20,7 +20,7 @@ def load_dotenv(path: Path = Path(".env")) -> list[str]:
         key, val = m.group(1), m.group(2)
         if len(val) >= 2 and val[0] == val[-1] and val[0] in "'\"":
             val = val[1:-1]
-        if key not in os.environ:
+        if val and key not in os.environ:  # empty placeholder lines are ignored
             os.environ[key] = val
             names.append(key)
     return names
