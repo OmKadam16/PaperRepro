@@ -8,7 +8,12 @@ from paperrepro.trace import Tracer
 
 def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
     assert state.paper, "ingest first"
-    prompt = f"PAPER:\n{state.paper.model_dump_json()}"
+    b = state.budget
+    prompt = (
+        f"COMPUTE BUDGET: CPU only, main.py must finish in {b.exec_timeout_s}s, "
+        f"{b.exec_memory_mb} MB RAM, {b.max_data_mb} MB of data in total.\n\n"
+        f"PAPER:\n{state.paper.model_dump_json()}"
+    )
     if state.critic_feedback:
         prompt += f"\n\nCRITIC FEEDBACK (re-read the paper for missed details):\n{state.critic_feedback}"
     result, usage = llm.structured(

@@ -1,0 +1,6 @@
+# Benchmark papers. Ground-truth claims are filled in Phase 2; Phase 1 target is first.
+- id: deep-ensembles
+  url: https://arxiv.org/abs/1612.01474
+  title: Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles
+  why: UCI regression (Table 1), tiny public data, fixed splits, reported +/- std, CPU minutes
+  phase: 1
