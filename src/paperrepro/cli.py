@@ -17,13 +17,14 @@ def run(
     dry_run: bool = typer.Option(False, help="Synthetic agents, no API key; tests the plumbing"),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run output goes"),
     max_iterations: int = typer.Option(4, help="Max critic -> reroute cycles"),
+    provider: str = typer.Option(None, help="openai | anthropic (default: whichever key is set)"),
 ) -> None:
     if dry_run:
         from paperrepro.dryrun import DryRunLLM
         llm = DryRunLLM()
     else:
-        from paperrepro.llm import AnthropicLLM
-        llm = AnthropicLLM()
+        from paperrepro.llm import make_llm
+        llm = make_llm(provider)
     state = RunState(url=url, dry_run=dry_run, budget=Budget(max_iterations=max_iterations))
     state = run_pipeline(state, llm, runs_dir)
     print(f"[bold]status:[/bold] {state.status}  run: {state.run_id}")
