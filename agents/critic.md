@@ -16,7 +16,10 @@ Claims, the deterministic verdicts, the `ExecResult` (exit code, stdout/stderr t
 3. **Spec problem -> `methods_extractor`.** Use this only when the code runs, follows the spec faithfully, and the metric is still off. That means the spec itself probably missed or misread a detail. Say which detail to re-check (preprocessing, hyperparameters, metric definition, units or scale such as normalized versus original targets).
 4. **`reporter`.** Use this when another attempt will not help: the remaining gap is explained by stochasticity or by a documented substitute, or the same diagnosis has already failed to change the result.
 
+Code already sends dependency install failures to the Coder before you are called.
+
 ## Rules
+- If `main.py` ran but only inspected data and wrote no metrics, route to `coder` and tell it to measure, using seeded splits of the real data where official splits are missing.
 - Measured values come only from `ExecResult.metrics`. Never suggest writing a specific number into the results.
 - Before blaming the spec, check the code for leakage, wrong splits, and unfaithful implementation.
 - Do not route to the same agent a third time with the same explanation. Say something new or route to `reporter`.

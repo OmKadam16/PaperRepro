@@ -77,6 +77,15 @@ def run(state: RunState, llm: LLM, tracer: Tracer, root: Path | None = None) -> 
         state.route, state.critic_feedback = Route.reporter, ""
         tracer.event("critic", route="reporter", statuses=[v.status.value for v in verdicts])
         return
+    if state.exec_result.stderr_tail.startswith("[install]"):
+        # nothing ran; only the Coder's requirements.txt can change this
+        msg = ("Dependency install failed before main.py ran. Fix requirements.txt "
+               f"(names, versions, CPU wheels):\n{state.exec_result.stderr_tail[-1500:]}")
+        for v in open_:
+            v.diagnosis = "not run: dependency install failed"
+        state.route, state.critic_feedback = Route.coder, msg
+        tracer.event("critic", route="coder", rule="install_failed")
+        return
     if reason := no_usable_data(state):
         for v in open_:
             v.status, v.diagnosis = VerdictStatus.unverifiable, reason

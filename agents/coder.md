@@ -15,9 +15,11 @@ A runnable workspace:
 `main.py` must write `results/metrics.json` as a flat JSON object `{claim_id: number}`. Write one number per claim id, and only for claims you actually measured.
 
 ## Data
-- Read data only from the dataset `local_paths` (relative to the workspace). The workspace has no other data, and the run may have no network.
+- Read data only from the dataset `local_paths` (relative to the workspace). The workspace has no other data, and the run may have no network. Files may be archives (`.zip`, `.tar.gz`): extract them inside the workspace at runtime.
 - If a dataset a claim needs has no `local_paths`, do **not** download it yourself, and do **not** generate synthetic or stand-in data. Leave that claim out of `metrics.json` and explain why in `ASSUMPTIONS.md`.
-- Check the file format at runtime (for example, print shapes and the first rows) so failures are diagnosable.
+- If official split indices are not in `local_paths`, **make seeded random splits of the real data** using the ratio and count the spec gives, and log that in `ASSUMPTIONS.md`. That is a standard, honest fallback, not stand-in data. Never refuse to train for lack of official splits.
+- Your job is to **measure**. A script that only inspects or audits data and writes no metrics is a failed attempt.
+- Check the file format at runtime (for example, print shapes, column names and the first rows) so failures are diagnosable.
 
 ## Rules
 - Follow the spec exactly. Where it is ambiguous, pick the most standard choice and log it in `ASSUMPTIONS.md`.

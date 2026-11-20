@@ -18,8 +18,10 @@ Leave `verified`, `verify_note`, and `local_paths` empty; code fills them after 
 
 ## Rules
 - Prefer the exact accession or file the paper cites. Note any version differences in `download_plan`.
-- Only use URLs and accessions that appear in the paper's text, its data or code links, or the critic feedback, or that are well-known canonical locations for a dataset you are certain of. If you are not certain a URL exists, set `status: missing` and explain in `download_plan`.
-- Never fabricate URLs or accessions.
+- Use URLs and accessions from the paper's text, its data or code links, the critic feedback, or well-known canonical locations for the dataset (the UCI repository, OpenML, a benchmark's author repository on GitHub).
+- **Code verifies every URL before anything is used**, so propose your best direct-file candidate with `status: available`, and let verification decide. Do not pre-mark an entry `missing` just because you are unsure. Mark it `missing` only when you have no candidate location at all.
+- Never fabricate accessions or claim a URL works. Code checks every URL you propose, and a URL that fails is reported as `missing`.
+- When a benchmark has official split files in an author repository, list them, and also the raw data file, as separate entries. That way the Coder can fall back to its own seeded splits if the split files fail verification.
 - One `DatasetRef` per file or record. If a dataset needs several files, list each one.
 - If data is restricted or missing, set `status` accordingly and propose the closest public substitute as a separate entry with `is_substitute: true`, and say in `download_plan` how it differs.
 - In `download_plan`, say what the Coder should expect: file format, columns, and how splits are defined.
