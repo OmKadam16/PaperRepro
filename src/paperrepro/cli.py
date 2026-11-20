@@ -38,6 +38,17 @@ def run(
 
 
 @app.command()
+def report(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> None:
+    """Re-render report.md/json from a run's saved state.json (deterministic, no LLM)."""
+    from paperrepro.agents import reporter
+    from paperrepro.trace import Tracer
+
+    state = RunState.load(run_dir / "state.json")
+    reporter.run(state, Tracer(run_dir / "trace.jsonl"), run_dir.parent)
+    print(f"report: {run_dir / 'report.md'}")
+
+
+@app.command()
 def bench(path: Path) -> None:
     """Run the benchmark set (planned: Phase 2)."""
     print("[yellow]bench is not implemented yet (see PLAN.md Phase 2)[/yellow]")

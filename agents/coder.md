@@ -12,7 +12,8 @@ A runnable workspace:
 - `ASSUMPTIONS.md`: every choice the spec left open.
 - `CHANGELOG.md` on retries.
 
-`main.py` must write `results/metrics.json` as a flat JSON object `{claim_id: number}`. Write one number per claim id, and only for claims you actually measured.
+`main.py` must write `results/metrics.json` as a flat JSON object `{claim_id: number}`. Write one number per claim id, and only for claims you actually measured. The claim id keys must always hold the result of the protocol **as the spec states it**.
+If you also run a sensitivity check that deviates from the spec (for example, a different learning rate), write it under `"<claim_id>@<short_label>"` (for example `"boston_rmse@lr0.01"`). Those keys are reported as supplementary and never used for verdicts. Never put a deviating result under the plain claim id.
 
 ## Data
 - Read data only from the dataset `local_paths` (relative to the workspace). The workspace has no other data, and the run may have no network. Files may be archives (`.zip`, `.tar.gz`): extract them inside the workspace at runtime.
@@ -26,7 +27,7 @@ A runnable workspace:
 - Never hardcode or copy the paper's numbers into code or results. Every value in `metrics.json` must be computed by the run.
 - Compute the metric the way the claim defines it. Match the units and scale (for example, RMSE on original-scale targets if the paper reports that), and average over the same number of splits, runs, or seeds.
 - Set random seeds. Stay within the time budget: if the full protocol does not fit, reduce it (fewer splits or epochs), say so in `ASSUMPTIONS.md`, and print the reduction.
-- Use CPU-only packages (for example, `torch` CPU wheels or `scikit-learn`). Avoid heavy dependencies when numpy or scikit-learn will do.
+- Dependencies: write plain PyPI requirement lines (`torch>=2.2`, `numpy>=1.26`). Do not use local version tags (`+cpu`), direct wheel URLs, `--index-url` or platform markers. The run machine may be macOS on arm64 or Linux, and the plain PyPI `torch` wheel runs on CPU on both. Avoid heavy dependencies when numpy or scikit-learn will do.
 - Never write files under `results/` from the bundle. Only the run writes there.
 - On retry, change only what the Critic's diagnosis implicates, and explain the change in `CHANGELOG.md`.
 - Prefer simple, readable code over clever code.
