@@ -113,6 +113,7 @@ def run_workspace(
     install_timeout_s: int = 600,
 ) -> ExecResult:
     t0 = time.time()
+    workspace = workspace.resolve()  # subprocesses run with cwd=workspace; relative paths would nest
     log_dir = workspace / "logs"
     shutil.rmtree(log_dir, ignore_errors=True)
     # LLM-written code never sees API keys or other secrets
