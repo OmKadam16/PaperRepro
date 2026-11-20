@@ -17,6 +17,7 @@ import sys
 import time
 from pathlib import Path
 
+from paperrepro.env import scrubbed_env
 from paperrepro.state import ExecResult
 
 TAIL = 4000
@@ -114,7 +115,8 @@ def run_workspace(
     t0 = time.time()
     log_dir = workspace / "logs"
     shutil.rmtree(log_dir, ignore_errors=True)
-    env = {**os.environ, "PYTHONHASHSEED": "0", "MPLBACKEND": "Agg", "PYTHONUNBUFFERED": "1"}
+    # LLM-written code never sees API keys or other secrets
+    env = {**scrubbed_env(dict(os.environ)), "PYTHONHASHSEED": "0", "MPLBACKEND": "Agg", "PYTHONUNBUFFERED": "1"}
     env.pop("VIRTUAL_ENV", None)
     py = sys.executable
     if install_deps and (workspace / "requirements.txt").exists():

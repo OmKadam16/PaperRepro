@@ -23,7 +23,11 @@ def run(
         from paperrepro.dryrun import DryRunLLM
         llm = DryRunLLM()
     else:
+        from paperrepro.env import load_dotenv
         from paperrepro.llm import make_llm
+        loaded = load_dotenv()
+        if loaded:
+            print(f"loaded from .env: {', '.join(loaded)}")
         llm = make_llm(provider)
     state = RunState(url=url, dry_run=dry_run, budget=Budget(max_iterations=max_iterations))
     state = run_pipeline(state, llm, runs_dir)
