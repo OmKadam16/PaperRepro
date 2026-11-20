@@ -139,6 +139,7 @@ class RunState(BaseModel):
     verdicts: list[Verdict] = Field(default_factory=list)
     critic_feedback: str = ""
     route: Route | None = None
+    route_history: list[Route] = Field(default_factory=list)  # every Critic reroute, in order
     tokens_used: int = 0
     started_at: float = Field(default_factory=time.time)
     status: Literal["running", "done", "budget_exhausted", "error"] = "running"

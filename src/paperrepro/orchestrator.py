@@ -60,7 +60,7 @@ def run_pipeline(state: RunState, llm: LLM, root: Path) -> RunState:
             elif step == "execute":
                 executor.run(state, tracer, root)
             elif step == "critic":
-                critic.run(state, llm, tracer)
+                critic.run(state, llm, tracer, root)
                 iterations += 1
                 if state.route == Route.reporter:
                     break
@@ -68,6 +68,7 @@ def run_pipeline(state: RunState, llm: LLM, root: Path) -> RunState:
                     state.status = "budget_exhausted"
                     tracer.event("orchestrator", stop="iteration budget")
                     break
+                state.route_history.append(state.route)
                 step_i = PIPELINE.index(ROUTE_TO_STEP[state.route])
                 tracer.event("orchestrator", reroute=state.route.value)
                 state.save(root)

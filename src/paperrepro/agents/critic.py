@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from paperrepro.agents.base import spec
 from paperrepro.llm import LLM
 from paperrepro.state import (
@@ -12,6 +14,8 @@ from paperrepro.state import (
     VerdictStatus,
 )
 from paperrepro.trace import Tracer
+
+CODE_CHARS = 30_000
 
 
 def within_tolerance(claim: Claim, measured: float) -> bool:
@@ -37,12 +41,34 @@ def compare_claims(claims: list[Claim], res: ExecResult) -> list[Verdict]:
         out.append(Verdict(
             claim_id=c.id, status=VerdictStatus.reproduced if ok else VerdictStatus.failed,
             paper_value=c.paper_value, measured_value=m, delta=round(m - c.paper_value, 6),
-            evidence="results/metrics.json",
+            evidence="workspace/results/metrics.json",
         ))
     return out
 
 
-def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
+def no_usable_data(state: RunState) -> str | None:
+    """Reason string if the spec needs data but nothing was downloaded, after one data retry."""
+    if not state.spec or not state.spec.datasets or not state.datasets:
+        return None
+    if any(d.local_paths for d in state.datasets):
+        return None
+    if state.route_history.count(Route.data_finder) < 1:
+        return None
+    reasons = "; ".join(f"{d.name}: {d.status} ({d.verify_note})" for d in state.datasets)
+    return f"no dataset could be obtained: {reasons}"
+
+
+def _workspace_code(ws: Path) -> str:
+    parts: list[str] = []
+    for p in sorted(ws.rglob("*")):
+        rel = p.relative_to(ws)
+        if not p.is_file() or rel.parts[0] in (".venv", "data", "results") or p.suffix not in (".py", ".md", ".txt"):
+            continue
+        parts.append(f"--- {rel}\n{p.read_text(errors='replace')}")
+    return "\n".join(parts)[:CODE_CHARS]
+
+
+def run(state: RunState, llm: LLM, tracer: Tracer, root: Path | None = None) -> None:
     assert state.spec and state.exec_result
     verdicts = compare_claims(state.spec.claims, state.exec_result)
     state.verdicts = verdicts
@@ -51,11 +77,25 @@ def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
         state.route, state.critic_feedback = Route.reporter, ""
         tracer.event("critic", route="reporter", statuses=[v.status.value for v in verdicts])
         return
+    if reason := no_usable_data(state):
+        for v in open_:
+            v.status, v.diagnosis = VerdictStatus.unverifiable, reason
+        state.route, state.critic_feedback = Route.reporter, reason
+        tracer.event("critic", route="reporter", rule="no_usable_data", explanation=reason)
+        return
+    ws = state.run_dir(root) / "workspace" if root else None
     prompt = (
+        f"ATTEMPT: {state.attempt}  PRIOR ROUTES: {[r.value for r in state.route_history]}\n"
+        f"CLAIMS:\n{[c.model_dump() for c in state.spec.claims]}\n"
         f"VERDICTS:\n{[v.model_dump() for v in verdicts]}\n"
         f"EXEC RESULT:\n{state.exec_result.model_dump_json()}\n"
+        f"DATASETS:\n{[d.model_dump(include={'name', 'status', 'verify_note', 'local_paths', 'is_substitute'}) for d in state.datasets]}\n"
+        f"SPEC (preprocessing / methods / evaluation):\n"
+        f"{state.spec.model_dump_json(include={'preprocessing', 'models_or_methods', 'evaluation'})}\n"
         f"SPEC AMBIGUITIES: {state.spec.ambiguities}\n"
     )
+    if ws and ws.exists():
+        prompt += f"\nWORKSPACE CODE:\n{_workspace_code(ws)}\n"
     diag, usage = llm.structured(agent="critic", system=spec("critic"), prompt=prompt, schema=Diagnosis)
     state.route, state.critic_feedback = diag.route, diag.explanation
     state.tokens_used += usage.total
