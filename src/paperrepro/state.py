@@ -56,9 +56,14 @@ class DatasetRef(BaseModel):
     accession: str = ""
     size_mb: float | None = None
     license: str = ""
-    status: Literal["available", "restricted", "missing"] = "available"
+    # too_large: resolves, but exceeds Budget.max_data_mb, so not downloaded
+    status: Literal["available", "restricted", "missing", "too_large"] = "available"
     is_substitute: bool = False
     download_plan: str = ""
+    # Set by code after verification, never by the LLM:
+    verified: bool = False
+    verify_note: str = ""
+    local_paths: list[str] = Field(default_factory=list)  # relative to the workspace
 
 
 class DatasetList(BaseModel):
@@ -117,6 +122,8 @@ class Budget(BaseModel):
     max_seconds: int = 3600
     exec_timeout_s: int = 600
     exec_memory_mb: int = 4096
+    max_data_mb: int = 2000  # total across all datasets in one run
+    install_timeout_s: int = 600
 
 
 class RunState(BaseModel):

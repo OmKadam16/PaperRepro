@@ -54,7 +54,7 @@ def run_pipeline(state: RunState, llm: LLM, root: Path) -> RunState:
             elif step == "extract":
                 methods_extractor.run(state, llm, tracer)
             elif step == "find_data":
-                data_finder.run(state, llm, tracer)
+                data_finder.run(state, llm, tracer, root)
             elif step == "code":
                 coder.run(state, llm, tracer, root)
             elif step == "execute":
