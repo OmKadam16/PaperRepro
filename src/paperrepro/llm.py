@@ -14,15 +14,12 @@ from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
-# Cheap model for mechanical agents, the cheapest flagship where quality decides the result.
-# Prices (Nov 2026, per 1M tokens in/out): gpt-6.1-terra $1/$5, gpt-6.2-sol $2/$10.
-OPENAI_DEFAULTS = {
-    "ingestor": "gpt-6.1-terra",
-    "data_finder": "gpt-6.1-terra",
-    "methods_extractor": "gpt-6.2-sol",
-    "coder": "gpt-6.2-sol",
-    "critic": "gpt-6.2-sol",
-}
+# gpt-5-mini everywhere: $0.25 in / $2 out per 1M tokens (Nov 2026).
+# NOTE: OpenAI shuts gpt-5-mini down on Dec 11, 2026 (its listed replacement is gpt-6.1-terra).
+# Override per agent with PAPERREPRO_MODEL_<AGENT>, or all agents with PAPERREPRO_MODEL.
+OPENAI_DEFAULT = "gpt-5-mini"
+OPENAI_DEFAULTS = {a: OPENAI_DEFAULT for a in
+                   ("ingestor", "data_finder", "methods_extractor", "coder", "critic")}
 OPENAI_EFFORT = {"ingestor": "low", "data_finder": "low", "critic": "low"}  # others: medium
 ANTHROPIC_DEFAULT = "claude-sonnet-5-5"
 
@@ -80,7 +77,7 @@ class OpenAILLM:
         self.client = openai.OpenAI(max_retries=3, timeout=600)
 
     def structured(self, *, agent: str, system: str, prompt: str, schema: type[T]) -> tuple[T, Usage]:
-        model = model_for(agent, OPENAI_DEFAULTS.get(agent, "gpt-6.2-sol"))
+        model = model_for(agent, OPENAI_DEFAULTS.get(agent, OPENAI_DEFAULT))
         effort = os.environ.get(f"PAPERREPRO_EFFORT_{agent.upper()}", OPENAI_EFFORT.get(agent, "medium"))
         tool = {"type": "function", "name": "submit", "strict": False,
                 "description": f"Submit the final {schema.__name__}.",
