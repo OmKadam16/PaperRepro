@@ -19,8 +19,8 @@ Target: Deep Ensembles, arXiv:1612.01474 (UCI regression, Table 1). See `benchma
 ### Phase 1 open issues
 - Network is not restricted while `main.py` runs (ARCHITECTURE says allowlist only). API keys are scrubbed from its environment.
 - `RLIMIT_AS` is not enforced on macOS, so the memory limit is best effort there.
-- Install-failure reroutes count toward `max_iterations` (run 2 lost 2 of 4 iterations to a bad torch pin, now addressed in coder.md).
-- The Critic can send the run back to methods_extractor when the paper simply has no more detail to give. Consider routing to reporter once methods_extractor has returned an unchanged spec.
+- ~~Install-failure reroutes count toward `max_iterations`~~: now capped separately (MAX_INSTALL_RETRIES).
+- ~~The Critic re-routes to methods_extractor repeatedly~~: a second re-read now goes to the reporter.
 
 ## Phase 2: benchmark
 - [ ] 10 papers in benchmark/papers.yaml with ground-truth claims
@@ -28,19 +28,19 @@ Target: Deep Ensembles, arXiv:1612.01474 (UCI regression, Table 1). See `benchma
 - [ ] Baseline: single-agent vs multi-agent comparison (the resume number)
 
 ## Phase 3: polish
-- [ ] Trace viewer (static HTML from trace.jsonl)
+- [x] Web app (static, from state.json + trace.jsonl): the lab dashboard, per-run page, claims wall, crew. `paperrepro site`
 - [ ] Docker sandbox (also solves network restriction and memory limits on macOS)
 - [ ] Demo GIF, README results table
 - [ ] Optional: web UI, MCP server wrapper
 
 ## Small fixes
 For any agent; see AGENTS.md. Each is one file or less.
-- [ ] `pyproject.toml`: add `filterwarnings = ["ignore::DeprecationWarning:importlib._bootstrap"]` under pytest options (the pymupdf SWIG warnings clutter `pytest -q`).
-- [ ] `cli.py`: annotate `provider` as `str | None` (it currently says `str` with a `None` default).
-- [ ] `tests/test_routing.py`: rename `agents_in_trace` to `trace_events` (it returns events, not agent names).
+- [x] `pyproject.toml`: add `filterwarnings = ["ignore::DeprecationWarning:importlib._bootstrap"]` under pytest options (the pymupdf SWIG warnings clutter `pytest -q`).
+- [x] `cli.py`: annotate `provider` as `str | None` (it currently says `str` with a `None` default).
+- [x] `tests/test_routing.py`: rename `agents_in_trace` to `trace_events` (it returns events, not agent names).
 - [ ] `dryrun.py`: wrap the lines over 100 chars (they pass only because E501 is ignored).
-- [ ] `README.md`: update "Status" (it still says "Early scaffold") and document `.env` plus `--provider`.
-- [ ] `AGENTS.md`: setup line should be `uv pip install -e ".[dev,pdf,openai]"`.
+- [x] `README.md`: update "Status" (it still says "Early scaffold") and document `.env` plus `--provider`.
+- [x] `AGENTS.md`: setup line should be `uv pip install -e ".[dev,pdf,openai]"`.
 
 ## Dev workflow
 - Claude Code: architecture, agents, orchestrator, anything multi-file.

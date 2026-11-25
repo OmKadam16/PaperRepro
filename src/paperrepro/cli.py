@@ -35,6 +35,10 @@ def run(
     for v in state.verdicts:
         print(f"  {v.claim_id}: {v.status.value} (paper {v.paper_value}, measured {v.measured_value})")
     print(f"report: {state.run_dir(runs_dir) / 'report.md'}")
+    from paperrepro.site import build_site
+
+    build_site(runs_dir)
+    print(f"web app: {runs_dir / '_site' / ('run-' + state.run_id + '.html')}")
 
 
 @app.command()
@@ -49,11 +53,20 @@ def report(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> N
 
 
 @app.command()
-def view(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> None:
-    """Write runs/<id>/view.html, a self-contained visual of the run (open it in a browser)."""
-    from paperrepro.viewer import write
+def site(runs_dir: Path = typer.Option(Path("runs"), help="Where run output lives")) -> None:
+    """Build the web app (the lab, claims, crew, one page per run) into runs/_site/."""
+    from paperrepro.site import build_site
 
-    print(f"view: {write(run_dir)}")
+    print(f"open: {build_site(runs_dir)}")
+
+
+@app.command()
+def view(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> None:
+    """Rebuild the web app and print the page for one run."""
+    from paperrepro.site import build_site
+
+    build_site(run_dir.parent)
+    print(f"open: {run_dir.parent / '_site' / ('run-' + run_dir.name + '.html')}")
 
 
 @app.command()
