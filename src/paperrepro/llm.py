@@ -14,13 +14,16 @@ from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
-# gpt-6.1-terra ($1 in / $5 out per 1M tokens, Nov 2026) handles all three helpers: reading
-# scanned pages, spotting citable sentences, and judging abstracts. A typical 10-page draft
-# costs roughly $0.05-0.20. Override per agent with PAPERREPRO_MODEL_<AGENT>, or all with
-# PAPERREPRO_MODEL (e.g. PAPERREPRO_MODEL_SOURCE_JUDGE=gpt-6.2-sol for stricter judging).
+# gpt-6.1-terra ($1 in / $5 out per 1M tokens, Nov 2026) for reading, framing, judging and
+# captions; gpt-6.2-sol ($2 / $10) where the reasoning is the product: mapping a literature
+# into gaps, and peer review. A typical gap study or review costs a few cents to ~$0.10.
+# Override per agent with PAPERREPRO_MODEL_<AGENT>, or all with PAPERREPRO_MODEL.
 OPENAI_DEFAULT = "gpt-6.1-terra"
-OPENAI_DEFAULTS = {"ocr": "gpt-6.1-terra", "claim_finder": "gpt-6.1-terra", "source_judge": "gpt-6.1-terra"}
-OPENAI_EFFORT = {"ocr": "low", "claim_finder": "low", "source_judge": "medium"}
+OPENAI_DEFAULTS = {"ocr": "gpt-6.1-terra", "claim_finder": "gpt-6.1-terra", "source_judge": "gpt-6.1-terra",
+                   "idea_framer": "gpt-6.1-terra", "gap_analyst": "gpt-6.2-sol", "novelty_checker": "gpt-6.1-terra",
+                   "reviewer": "gpt-6.2-sol", "caption_writer": "gpt-6.1-terra"}
+OPENAI_EFFORT = {"ocr": "low", "claim_finder": "low", "source_judge": "medium", "idea_framer": "low",
+                 "gap_analyst": "medium", "novelty_checker": "medium", "reviewer": "medium", "caption_writer": "low"}
 ANTHROPIC_DEFAULT = "claude-sonnet-5-5"
 
 

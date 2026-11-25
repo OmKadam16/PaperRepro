@@ -27,7 +27,7 @@ paperrepro = "paperrepro.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-paperrepro = ["*.html"]
+paperrepro = ["web/*"]
 
 [tool.ruff]
 line-length = 100

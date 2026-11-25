@@ -182,6 +182,7 @@ _STYLES_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="22"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Note"><w:name w:val="Note"/><w:basedOn w:val="Normal"/><w:rPr><w:i/><w:color w:val="6C6556"/><w:sz w:val="20"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Reference"><w:name w:val="Reference"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="567" w:hanging="567"/><w:spacing w:after="80"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>
 </w:styles>"""
 _CT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -203,9 +204,14 @@ _XML_BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")  # not allowed in XML
 
 
 def to_docx(project: Project, style: Style | None = None) -> bytes:
+    return docx_bytes(rendered(project, style))
+
+
+def docx_bytes(paragraphs: list[tuple[str, str]]) -> bytes:
+    """(kind, text) -> a minimal valid .docx. kind: heading | body | ref | bullet."""
     body = []
-    for kind, text in rendered(project, style):
-        sty = {"heading": "Heading1", "ref": "Reference"}.get(kind)
+    for kind, text in paragraphs:
+        sty = {"heading": "Heading1", "ref": "Reference", "bullet": "Reference", "note": "Note"}.get(kind)
         ppr = f'<w:pPr><w:pStyle w:val="{sty}"/></w:pPr>' if sty else ""
         body.append(f'<w:p>{ppr}<w:r><w:t xml:space="preserve">{escape(_XML_BAD.sub("", text))}</w:t></w:r></w:p>')
     doc = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

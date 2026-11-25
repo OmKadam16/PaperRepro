@@ -9,7 +9,7 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
@@ -121,3 +121,156 @@ class Project(BaseModel):
     @classmethod
     def load(cls, path: Path) -> "Project":
         return cls.model_validate(json.loads(path.read_text()))
+
+
+# ================================================================ shared record storage
+class Record(BaseModel):
+    """Base for gap studies, reviews and figures: one JSON file per record."""
+    id: str = Field(default_factory=lambda: time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6])
+    created_at: float = Field(default_factory=time.time)
+    status: Literal["queued", "working", "ready", "error"] = "queued"
+    progress: str = ""
+    error: str = ""
+    tokens_used: int = 0
+
+    KIND: ClassVar[str] = "record"
+
+    def path(self, root: Path) -> Path:
+        return root / self.KIND / self.id / f"{self.KIND}.json"
+
+    def save(self, root: Path) -> None:
+        p = self.path(root)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(self.model_dump_json(indent=1))
+        tmp.replace(p)
+
+
+# ================================================================ stage 1: finding a gap
+class Framing(BaseModel):
+    """LLM output of the Idea Framer."""
+    field: str = Field(description="the research field and sub-field, in a few words")
+    summary: str = Field(description="the idea restated precisely in 1-2 sentences")
+    questions: list[str] = Field(description="2-4 candidate research questions, specific and answerable")
+    queries: list[str] = Field(description="4-6 short keyword searches covering the idea from different angles")
+    assumptions: list[str] = Field(default_factory=list, description="anything you had to assume about the idea")
+
+
+class Theme(BaseModel):
+    name: str
+    summary: str = Field(description="what this body of work does and finds, 1-2 sentences")
+    paper_ids: list[str] = Field(description="ids of the provided papers in this theme")
+
+
+class Gap(BaseModel):
+    title: str
+    description: str = Field(description="what is missing, concretely")
+    why_open: str = Field(description="why the provided papers leave it open, citing them by id")
+    evidence_ids: list[str] = Field(description="ids of provided papers that show the gap")
+    question: str = Field(description="a research question that would fill the gap")
+    approach: str = Field(description="a feasible way to study it: data, method, comparison")
+    kind: Literal["unstudied", "contradictory", "narrow_evidence", "method", "population", "replication"] = "unstudied"
+
+
+class Landscape(BaseModel):
+    """LLM output of the Gap Analyst."""
+    themes: list[Theme]
+    gaps: list[Gap]
+
+
+class NoveltyCheck(BaseModel):
+    """LLM output of the Novelty Checker for one gap."""
+    verdict: Literal["open", "partly_addressed", "addressed"]
+    reason: str
+    addressing_ids: list[str] = Field(default_factory=list, description="ids of papers that already address it")
+
+
+class CheckedGap(Gap):
+    novelty: Literal["open", "partly_addressed", "addressed", "unchecked"] = "unchecked"
+    novelty_reason: str = ""
+    addressing_ids: list[str] = Field(default_factory=list)
+
+
+class GapStudy(Record):
+    KIND: ClassVar[str] = "gap"
+    idea: str
+    framing: Framing | None = None
+    papers: dict[str, Source] = Field(default_factory=dict)
+    themes: list[Theme] = Field(default_factory=list)
+    gaps: list[CheckedGap] = Field(default_factory=list)
+
+
+# ================================================================ stage 5: review
+class CriterionScore(BaseModel):
+    criterion: Literal["originality", "clarity", "methods", "evidence", "structure", "significance"]
+    score: int = Field(ge=1, le=5, description="1 = serious problems, 3 = acceptable, 5 = excellent")
+    comment: str
+
+
+class ReviewIssue(BaseModel):
+    severity: Literal["major", "minor"]
+    issue: str
+    sentence_ids: list[str] = Field(default_factory=list, description="ids of the sentences concerned, if any")
+    fix: str = Field(description="a concrete, actionable fix")
+
+
+class PeerReview(BaseModel):
+    """LLM output of the Reviewer."""
+    summary: str = Field(description="what the paper does, in 2-3 sentences, as the reviewer understood it")
+    scores: list[CriterionScore]
+    strengths: list[str]
+    issues: list[ReviewIssue]
+    recommendation: Literal["ready", "minor_revision", "major_revision", "not_ready"]
+
+
+class Measures(BaseModel):
+    """Deterministic checks computed by code."""
+    words: int = 0
+    sentences: int = 0
+    avg_sentence_words: float = 0.0
+    long_sentences: int = 0  # over 40 words
+    sections_found: list[str] = Field(default_factory=list)
+    sections_missing: list[str] = Field(default_factory=list)
+    has_references: bool = False
+    citation_markers: int = 0
+    passive_ratio: float = 0.0
+
+
+class Review(Record):
+    KIND: ClassVar[str] = "review"
+    filename: str = ""
+    draft: Draft = Field(default_factory=Draft)
+    measures: Measures | None = None
+    review: PeerReview | None = None
+
+
+# ================================================================ stage 3: figures
+class Caption(BaseModel):
+    """LLM output of the Caption Writer."""
+    caption: str = Field(description="a journal-style figure caption: what is shown, units, n, what the error bars mean")
+    alt_text: str = Field(description="a plain description for screen readers")
+
+
+class FigureSpec(BaseModel):
+    chart: Literal["line", "bar", "scatter", "errorbar"] = "line"
+    x: str = ""
+    ys: list[str] = Field(default_factory=list)
+    errors: dict[str, str] = Field(default_factory=dict)  # y column -> its error column
+    preset: Literal["single", "double", "thesis", "slide"] = "single"
+    palette: Literal["okabe_ito", "grayscale", "viridis"] = "okabe_ito"
+    font: Literal["sans", "serif"] = "sans"
+    xlabel: str = ""
+    ylabel: str = ""
+    legend: bool = True
+    log_y: bool = False
+    fit: bool = False  # least-squares line on scatter plots
+
+
+class Figure(Record):
+    KIND: ClassVar[str] = "figure"
+    status: Literal["queued", "working", "ready", "error"] = "ready"
+    title: str = "Untitled figure"
+    csv: str = ""
+    spec: FigureSpec = Field(default_factory=FigureSpec)
+    caption: str = ""
+    alt_text: str = ""
