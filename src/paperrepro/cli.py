@@ -49,6 +49,14 @@ def report(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> N
 
 
 @app.command()
+def view(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> None:
+    """Write runs/<id>/view.html, a self-contained visual of the run (open it in a browser)."""
+    from paperrepro.viewer import write
+
+    print(f"view: {write(run_dir)}")
+
+
+@app.command()
 def bench(path: Path) -> None:
     """Run the benchmark set (planned: Phase 2)."""
     print("[yellow]bench is not implemented yet (see PLAN.md Phase 2)[/yellow]")

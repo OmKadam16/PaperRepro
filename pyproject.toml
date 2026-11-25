@@ -26,6 +26,9 @@ paperrepro = "paperrepro.cli:app"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+paperrepro = ["*.html"]
+
 [tool.ruff]
 line-length = 100
 extend-exclude = ["runs"]
