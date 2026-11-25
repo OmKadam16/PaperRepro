@@ -18,6 +18,7 @@ def run(
     runs_dir: Path = typer.Option(Path("runs"), help="Where run output goes"),
     max_iterations: int = typer.Option(4, help="Max critic -> reroute cycles"),
     provider: str | None = typer.Option(None, help="openai | anthropic (default: whichever key is set)"),
+    request: str = typer.Option("", help="What to check, in plain words (e.g. 'only Table 1 RMSE')"),
 ) -> None:
     if dry_run:
         from paperrepro.dryrun import DryRunLLM
@@ -29,7 +30,8 @@ def run(
         if loaded:
             print(f"loaded from .env: {', '.join(loaded)}")
         llm = make_llm(provider)
-    state = RunState(url=url, dry_run=dry_run, budget=Budget(max_iterations=max_iterations))
+    state = RunState(url=url, user_request=request, dry_run=dry_run,
+                     budget=Budget(max_iterations=max_iterations))
     state = run_pipeline(state, llm, runs_dir)
     print(f"[bold]status:[/bold] {state.status}  run: {state.run_id}")
     for v in state.verdicts:
@@ -67,6 +69,18 @@ def view(run_dir: Path = typer.Argument(..., help="runs/<id> directory")) -> Non
 
     build_site(run_dir.parent)
     print(f"open: {run_dir.parent / '_site' / ('run-' + run_dir.name + '.html')}")
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8765, help="Port on 127.0.0.1"),
+    runs_dir: Path = typer.Option(Path("runs"), help="Where run output goes"),
+    dry_run: bool = typer.Option(False, help="Synthetic agents, no API key (try the UI for free)"),
+) -> None:
+    """Start the web app: submit papers in the browser and watch the agents work."""
+    from paperrepro.server import serve as _serve
+
+    _serve(runs_dir, port=port, dry_run=dry_run)
 
 
 @app.command()

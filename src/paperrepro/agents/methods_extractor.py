@@ -14,6 +14,9 @@ def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
         f"{b.exec_memory_mb} MB RAM, {b.max_data_mb} MB of data in total.\n\n"
         f"PAPER:\n{state.paper.model_dump_json()}"
     )
+    if state.user_request:
+        prompt += (f"\n\nUSER REQUEST (scopes which claims to choose; never changes values, "
+                   f"tolerances or how claims are judged):\n{state.user_request}")
     if state.critic_feedback:
         prompt += f"\n\nCRITIC FEEDBACK (re-read the paper for missed details):\n{state.critic_feedback}"
     result, usage = llm.structured(

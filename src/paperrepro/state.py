@@ -129,6 +129,9 @@ class Budget(BaseModel):
 class RunState(BaseModel):
     run_id: str = Field(default_factory=lambda: time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6])
     url: str
+    # What the person asked to check, in their own words (web app chat box / --request).
+    # It scopes which claims are chosen; it never changes how they are judged.
+    user_request: str = ""
     dry_run: bool = False
     budget: Budget = Field(default_factory=Budget)
     paper: Paper | None = None

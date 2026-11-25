@@ -63,11 +63,17 @@ def _summary(e: dict) -> str:
             return f"attempt {e.get('attempt')}: timed out"
         if e.get("exit_code") == 0:
             return f"attempt {e.get('attempt')}: ran in {e.get('duration_s')}s, {len(e.get('metrics') or {})} metrics"
-        tail = (e.get("stderr_tail") or "").strip()
-        return f"attempt {e.get('attempt')}: exit {e.get('exit_code')}. {(tail.splitlines() or [''])[0][:160]}"
+        # the last line of a traceback is the error itself; the first is boilerplate
+        lines = [ln.strip() for ln in (e.get("stderr_tail") or "").splitlines() if ln.strip()]
+        return f"attempt {e.get('attempt')} crashed (exit {e.get('exit_code')}): {(lines or ['no error output'])[-1][:200]}"
     if a == "critic":
-        rule = e.get("rule")
-        return (f"rule {rule}: " if rule else "") + (e.get("explanation") or f"route {e.get('route')}")
+        rule = {"install_failed": "dependency install failed, so",
+                "no_usable_data": "no usable data, so", "spec_reread_once": "paper already re-read once, so"}.get(e.get("rule") or "", "")
+        if e.get("explanation"):
+            return (rule + " " if rule else "") + e["explanation"]
+        if e.get("route") == "reporter":
+            return "Every claim is settled; handing over to the Scribe."
+        return f"{rule} sending it back to the {e.get('route')}".strip()
     if a == "reporter":
         return "report written"
     return ""
@@ -131,7 +137,8 @@ def load_run(run_dir: Path) -> dict:
         status = "interrupted"  # the process was stopped; this is not a live run
     return {
         "id": state.run_id, "title": state.paper.title if state.paper else state.url,
-        "url": state.url, "status": status, "dry_run": state.dry_run, "error": state.error,
+        "url": state.url, "user_request": state.user_request,
+        "status": status, "dry_run": state.dry_run, "error": state.error,
         "finished": status in FINISHED, "started": t0,
         "when": _when(t0), "attempts": state.attempt, "tokens": state.tokens_used,
         "wall_s": round(end - t0, 1),
@@ -189,6 +196,7 @@ def build_site(root: Path) -> Path:
     briefs = [_brief(r) for r in runs]
     nav = {"runs": [{"id": b["id"], "when": b["when"], "dry_run": b["dry_run"]} for b in briefs]}
     (out / "index.html").write_text(_page(template, {"page": "lab", "nav": nav, "runs": briefs}))
+    (out / "new.html").write_text(_page(template, {"page": "new", "nav": nav, "jobs": []}))
     claims = [{**v, "run": r["id"], "title": r["title"], "when": r["when"]}
               for r in runs if not r["dry_run"] and r["finished"] for v in r["verdicts"]]
     (out / "claims.html").write_text(_page(template, {"page": "claims", "nav": nav, "claims": claims}))
