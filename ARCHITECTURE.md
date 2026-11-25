@@ -46,6 +46,12 @@ upload (.pdf .docx .txt .md, or pasted text)
 
 Safety: binds 127.0.0.1; checks Host and Origin; writes need the `X-PaperRepro: 1` header; ids, sizes, file types and styles are validated; all page text is rendered with `textContent`.
 
+## Project assistant and limits
+- Every research tab has a text-only chat panel on the right (`web/panel.js`, `POST /api/r/<id>/chat`). `chatmodels.py` tries Nemotron 3 Ultra (OpenRouter, free) first and GLM-4.7-Flash (Z.ai, thinking off) as the backup. Its spec is `agents/project_assistant.md`, plus the project's title, question, gap and counts. Agentic work stays on OpenAI.
+- `guard.py` (deterministic) refuses code requests and prompt or key-fishing attacks before any model call, and replaces any reply that contains code. It covers both the panel and the home Guide. A refusal costs nothing.
+- `quota.py`: each user gets 15 AI actions a day (UTC). The count uses a signed HttpOnly cookie and the network address together, so clearing cookies doesn't reset it, and it is saved to `projects/usage.json`. Each action counts as 1 call: a chat message (with any gap search it runs), a citation run, find-sources-for-a-sentence, a review, or an AI caption. If both chat models are down, the call is refunded.
+- `keys.py`: keys are read only on the server. Every text response is scrubbed of key values and key-shaped strings, `.env` is made owner-only at startup, and only a fixed list of static files can be served (tests try `/.env`, `../` and `%2e%2e` paths).
+
 ## Privacy
 The draft's text goes to the LLM provider (reading, finding claims, judging). Only short keyword queries go to OpenAlex / Semantic Scholar. Drafts are stored in `projects/` (gitignored).
 

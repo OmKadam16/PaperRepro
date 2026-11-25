@@ -6,13 +6,17 @@ plan, figures, cite, review) holding only that project's work.
 
 Safety: binds 127.0.0.1 only, checks Host and Origin, requires a custom header on every
 write (blocks cross-site posts), validates ids, sizes, types; static files are a fixed set.
+Keys stay on the server: every text response is scrubbed of key values and key-shaped strings.
+Each user gets a strict daily allowance of AI actions (quota.py); chat text is screened (guard.py).
 """
 from __future__ import annotations
 
 import json
+import math
 import queue
 import re
 import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -22,7 +26,10 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from pydantic import ValidationError
 
-from paperrepro import cite, figures, templates
+from paperrepro import chatmodels, cite, figures, guard, templates
+from paperrepro.agents.base import spec
+from paperrepro.keys import protect_env_file, redact_bytes
+from paperrepro.quota import Quota
 from paperrepro.state import (
     Chat,
     ChatMessage,
@@ -35,15 +42,17 @@ from paperrepro.state import (
     Review,
 )
 from paperrepro.tools.reader import MAX_BYTES
+from paperrepro.trace import Tracer
 
 ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 SID = re.compile(r"^p\d+s\d+$")
 MAX_TEXT = 400_000
-MAX_CHAT = 4000
+MAX_CHAT = guard.MAX_MESSAGE
+PANEL_HISTORY = 12
 STYLES = ("numbered", "ieee", "apa")
 TOOLS = ("overview", "plan", "figures", "cite", "review")
 STATIC = {name: ("text/css" if name.endswith(".css") else "text/javascript") for name in
-          ("app.css", "core.js", "chat.js", "research.js", "plan.js", "figures.js", "cite.js", "review.js")}
+          ("app.css", "core.js", "chat.js", "research.js", "plan.js", "figures.js", "cite.js", "review.js", "panel.js")}
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 DOC_EXT = re.compile(r"\.(pdf|docx|txt|md|markdown|tex)$", re.I)
 EARLIER = "Earlier work"
@@ -52,8 +61,12 @@ EARLIER = "Earlier work"
 class Desk:
     """All records in memory (the source of truth while running) plus one AI job worker."""
 
-    def __init__(self, root: Path, jobs: dict[str, Callable], can_run: str = ""):
+    def __init__(self, root: Path, jobs: dict[str, Callable], can_run: str = "",
+                 quota: Quota | None = None, complete: Callable = chatmodels.complete):
         self.root, self.jobs, self.can_run = root, jobs, can_run
+        root.mkdir(parents=True, exist_ok=True)
+        self.quota = quota or Quota(root)
+        self.complete = complete  # text-only chat models for the project panel
         self.projects: dict[str, Project] = {}
         self.gaps: dict[str, GapStudy] = {}
         self.reviews: dict[str, Review] = {}
@@ -152,12 +165,36 @@ class Desk:
     def shell(self) -> dict:
         """What every page needs: open tabs, research list, recent chats."""
         rs = sorted(self.research.values(), key=lambda r: -r.created_at)
-        cs = sorted(self.chats.values(), key=lambda c: -(c.messages[-1].at if c.messages else c.created_at))
+        cs = sorted((c for c in self.chats.values() if not c.research_id), key=lambda c: -(c.messages[-1].at if c.messages else c.created_at))
         return {"tabs": [{"id": t, "title": self.research[t].title} for t in self.tabs],
                 "researches": [{"id": r.id, "title": r.title, "question": r.question, "created_at": r.created_at,
                                 "open": r.id in self.tabs, **self.research_counts(r.id)} for r in rs],
                 "chats": [{"id": c.id, "title": c.title, "created_at": c.created_at, "busy": bool(self.busy.get(c.id))} for c in cs[:30]],
                 "can_run": self.can_run}
+
+    def panel_chat(self, rid: str) -> Chat:
+        """The side-panel conversation of one research project (one per project)."""
+        c = next((c for c in self.chats.values() if c.research_id == rid), None)
+        if c is None:
+            c = Chat(research_id=rid, title="Project assistant")
+            self.chats[c.id] = c
+        return c
+
+    def panel_system(self, res: Research) -> str:
+        n = self.research_counts(res.id)
+        lines = [spec("project_assistant"), "", "## This project", f"Title: {res.title}"]
+        if res.question:
+            lines.append(f"Research question: {res.question}")
+        if res.gap:
+            g = res.gap
+            lines += [f"The gap it fills: {g.title}. {g.description}", f"Suggested approach: {g.approach}",
+                      f"Novelty check: {g.novelty.replace('_', ' ')}"]
+        t = templates.BY_KEY.get(res.template)
+        if t:
+            lines.append(f"Paper template: {t.name}")
+        lines.append(f"Work so far: {n['figures']} figures, {n['drafts']} drafts in Cite with {n['citations']} citations, "
+                     f"{n['reviews']} reviews.")
+        return "\n".join(lines)
 
     def chat_view(self, c: Chat) -> dict:
         studies = {m.study_id: record_view(self.gaps[m.study_id], self.busy.get(m.study_id))
@@ -194,13 +231,42 @@ def make_handler(desk: Desk, port: int):
         def log_message(self, fmt, *args):
             pass
 
+        def _ident(self) -> None:
+            """Who is asking, for the daily allowance: a signed cookie plus the network address."""
+            self.ip = self.client_address[0]
+            m = re.search(r"(?:^|;\s*)pr_uid=([0-9a-f]{24}\.[0-9a-f]{24})", self.headers.get("Cookie", ""))
+            self.uid = desk.quota.verify(m.group(1)) if m else None
+            self.new_cookie = None
+            if not self.uid:
+                self.new_cookie = desk.quota.new_user()
+                self.uid = desk.quota.verify(self.new_cookie)
+
+        def _quota(self) -> dict:
+            return desk.quota.status(self.uid, self.ip)
+
+        def _spend(self) -> bool:
+            """Take one AI action from today's allowance, or answer 429 and return False."""
+            if desk.quota.take(self.uid, self.ip):
+                return True
+            q = self._quota()
+            left = max(60, datetime_seconds_until(q["resets_at"]))
+            h, mnt = divmod(math.ceil(left / 60), 60)
+            when = f"{h} h {mnt} min" if h else f"{mnt} min"
+            self._json(429, {"error": f"You've used all {q['limit']} AI calls for today. They reset at midnight UTC, in {when}.",
+                             "quota": q})
+            return False
+
         def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None) -> None:
+            if ctype.startswith(("text/", "application/json")):
+                body = redact_bytes(body)  # never let a key reach the browser, even inside an error
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Cache-Control", "no-store")
+            if getattr(self, "new_cookie", None):
+                self.send_header("Set-Cookie", f"pr_uid={self.new_cookie}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -212,7 +278,7 @@ def make_handler(desk: Desk, port: int):
         def _page(self, page: str, script: str, data: dict | None = None, research: Research | None = None, tool: str = "") -> None:
             if research:
                 desk.open_tab(research.id)
-            payload = {"page": page, **desk.shell(), "tool": tool, **(data or {})}
+            payload = {"page": page, **desk.shell(), "tool": tool, "quota": self._quota(), **(data or {})}
             if research:
                 payload["research"] = {**record_view(research, None), **desk.research_counts(research.id)}
             blob = json.dumps(payload).replace("</", "<\\/")
@@ -233,6 +299,7 @@ def make_handler(desk: Desk, port: int):
         def do_GET(self) -> None:
             if self.headers.get("Host", "") not in hosts:
                 return self._json(403, {"error": "bad host"})
+            self._ident()
             u = urlparse(self.path)
             path, qs = u.path.rstrip("/") or "/", parse_qs(u.query)
             if (m := re.fullmatch(r"/static/([\w.]+)", path)) and m.group(1) in STATIC:
@@ -281,6 +348,10 @@ def make_handler(desk: Desk, port: int):
                     return self._json(200, desk.chat_view(c))
             if path == "/api/shell":
                 return self._json(200, desk.shell())
+            if path == "/api/quota":
+                return self._json(200, self._quota())
+            if (m := re.fullmatch(r"/api/r/([^/]+)/chat", path)) and (res := self._get(desk.research, m.group(1))):
+                return self._json(200, self._panel_view(res))
             if (m := re.fullmatch(r"/api/d/([^/]+)", path)) and (p := self._get(desk.projects, m.group(1))):
                 with desk.lock(p.id):
                     return self._json(200, project_view(p, desk.busy.get(p.id)))
@@ -306,6 +377,7 @@ def make_handler(desk: Desk, port: int):
         def do_POST(self) -> None:
             if self.headers.get("Host", "") not in hosts:
                 return self._json(403, {"error": "bad host"})
+            self._ident()
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).netloc not in hosts:
                 return self._json(403, {"error": "cross-origin request refused"})
@@ -327,6 +399,8 @@ def make_handler(desk: Desk, port: int):
                 name = unquote(self.headers.get("X-Filename", "draft")).replace("/", "_").replace("\\", "_")[:200]
                 if not DOC_EXT.search(name):
                     return self._json(400, {"error": "upload a PDF, a Word file (.docx), or plain text (.txt, .md)"})
+                if not self._spend():
+                    return
                 return self._json(201, {"id": self._start(path, name, body, res)})
 
             if not self.headers.get("Content-Type", "").startswith("application/json"):
@@ -340,6 +414,8 @@ def make_handler(desk: Desk, port: int):
 
             if path == "/api/chat":
                 return self._chat(data)
+            if (m := re.fullmatch(r"/api/r/([^/]+)/chat", path)) and (res := self._get(desk.research, m.group(1))):
+                return self._panel(res, data)
             if path == "/api/research":
                 return self._start_research(data)
             if path == "/api/tabs/close":
@@ -370,6 +446,8 @@ def make_handler(desk: Desk, port: int):
                 if len(text) > MAX_TEXT:
                     return self._json(400, {"error": "that is very long; upload it as a file instead"})
                 title = re.sub(r"[^\w\-' ]+", "", str(data.get("title", "")))[:60].strip() or "Pasted draft"
+                if not self._spend():
+                    return
                 return self._json(201, {"id": self._start(path.replace("paste", "upload"), f"{title}.txt", text.encode(), res)})
 
             if path == "/api/figures":
@@ -377,6 +455,8 @@ def make_handler(desk: Desk, port: int):
             if (m := re.fullmatch(r"/api/figures/([^/]+)/caption", path)) and (f := self._get(desk.figures, m.group(1))):
                 if desk.can_run:
                     return self._json(409, {"error": desk.can_run})
+                if not self._spend():
+                    return
                 try:
                     with desk.lock(f.id):
                         desk.jobs["caption"](f, None, desk.root, desk.lock(f.id))
@@ -403,16 +483,73 @@ def make_handler(desk: Desk, port: int):
             c = self._get(desk.chats, cid) if cid else None
             if cid and not c:
                 return self._json(404, {"error": "not found"})
+            if c and c.research_id:
+                return self._json(404, {"error": "not found"})
             if c and desk.busy.get(c.id):
                 return self._json(409, {"error": "still thinking about your last message"})
+            refusal = guard.check_message(text)
+            if not refusal and not self._spend():
+                return
             c = c or Chat()
             with desk.lock(c.id):
                 c.messages.append(ChatMessage(role="user", text=text))
-                c.status = "queued"
+                if refusal:  # answered by the server itself: no model call, no allowance spent
+                    c.messages.append(ChatMessage(role="assistant", text=refusal))
+                    if c.title == "New conversation":
+                        c.title = text[:70]
+                else:
+                    c.status = "queued"
                 c.save(desk.root)
             desk.chats[c.id] = c
-            desk.enqueue("chat", c.id, desk.gaps)
-            return self._json(200, desk.chat_view(c))
+            if not refusal:
+                desk.enqueue("chat", c.id, desk.gaps)
+            return self._json(200, {**desk.chat_view(c), "quota": self._quota()})
+
+        # ---------------------------------------------------------------- project panel
+        def _panel_view(self, res: Research) -> dict:
+            c = next((c for c in desk.chats.values() if c.research_id == res.id), None)
+            return {"messages": [m.model_dump() for m in c.messages] if c else [], "busy": bool(c and desk.busy.get(c.id)),
+                    "models": chatmodels.available(), "quota": self._quota()}
+
+        def _panel(self, res: Research, data: dict) -> None:
+            text = str(data.get("text", "")).strip()
+            if not text:
+                return self._json(400, {"error": "type a message"})
+            if not chatmodels.available():
+                return self._json(409, {"error": "The project chat isn't set up: add OPENROUTER_API_KEY or ZAI_API_KEY to .env and restart."})
+            with desk.guard:
+                c = desk.panel_chat(res.id)
+                if desk.busy.get(c.id):
+                    return self._json(409, {"error": "still answering your last message"})
+                desk.busy[c.id] = "panel"
+            try:
+                refusal = guard.check_message(text)
+                if refusal:
+                    with desk.lock(c.id):
+                        c.messages += [ChatMessage(role="user", text=text[:MAX_CHAT]), ChatMessage(role="assistant", text=refusal)]
+                        c.save(desk.root)
+                    return self._json(200, {**self._panel_view(res), "busy": False, "model": "", "refused": True})
+                if not self._spend():
+                    return
+                history = [{"role": m.role, "content": m.text} for m in c.messages[-PANEL_HISTORY:] if m.text]
+                tracer, t0 = Tracer(c.path(desk.root).parent / "trace.jsonl"), time.time()
+                try:
+                    reply = desk.complete(desk.panel_system(res), [*history, {"role": "user", "content": text}])
+                except chatmodels.ChatUnavailable as e:
+                    desk.quota.refund(self.uid, self.ip)
+                    tracer.event("project_assistant", error=str(e), seconds=round(time.time() - t0, 2))
+                    return self._json(503, {"error": "Both chat models are busy right now (this didn't use a call). Try again in a minute.",
+                                            "quota": self._quota()})
+                answer = guard.check_reply(reply.text)
+                tracer.event("project_assistant", model=reply.model, tried=reply.tried, tokens=reply.tokens,
+                             blocked=answer != reply.text, seconds=round(time.time() - t0, 2))
+                with desk.lock(c.id):
+                    c.messages += [ChatMessage(role="user", text=text), ChatMessage(role="assistant", text=answer)]
+                    c.tokens_used += reply.tokens
+                    c.save(desk.root)
+                return self._json(200, {**self._panel_view(res), "busy": False, "model": reply.model})
+            finally:
+                desk.busy.pop(c.id, None)
 
         def _start_research(self, data: dict) -> None:
             study = self._get(desk.gaps, str(data.get("study_id", "")))
@@ -500,6 +637,8 @@ def make_handler(desk: Desk, port: int):
                         return self._json(400, {"error": "unknown sentence"})
                     if desk.busy.get(p.id):
                         return self._json(409, {"error": "still working on this draft; try again in a moment"})
+                    if not self._spend():
+                        return
                     desk.enqueue("find", p.id, sid)
                 p.save(desk.root)
                 return self._json(200, project_view(p, desk.busy.get(p.id)))
@@ -529,10 +668,18 @@ def make_jobs(llm) -> dict[str, Callable]:
     }
 
 
+def datetime_seconds_until(iso: str) -> float:
+    from datetime import datetime
+    return (datetime.fromisoformat(iso) - datetime.now(datetime.fromisoformat(iso).tzinfo)).total_seconds()
+
+
 def serve(root: Path, port: int = 8765) -> None:
     from paperrepro.env import load_dotenv
     from paperrepro.llm import LLMError, make_llm
 
+    note = protect_env_file(Path(".env"))
+    if note:
+        print(note, flush=True)
     load_dotenv()
     can_run, llm = "", None
     try:

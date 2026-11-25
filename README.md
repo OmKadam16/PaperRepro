@@ -18,6 +18,9 @@ echo 'OPENAI_API_KEY=sk-...' > .env      # gitignored
 paperrepro serve                         # then open http://127.0.0.1:8765
 ```
 
+## Keys and limits
+Put keys in `.env` only: `OPENAI_API_KEY` for the AI helpers, plus `OPENROUTER_API_KEY` and/or `ZAI_API_KEY` for the chat panel in each project tab. The browser never receives them. Each user gets **15 AI calls a day** (each chat message, citation run, review or caption is one call), and the counter resets at midnight UTC. The panel is text-only: requests for code are refused.
+
 ## What it will not do
 - Invent a paper. Every paper shown anywhere is a real OpenAlex record with a DOI or link; helpers can only refer to papers they were shown, and code drops anything else.
 - Show a quote that is not in the paper's abstract, or call a source "supports" without one.

@@ -460,3 +460,44 @@ label.f { display: block; font-family: var(--ui); font-size: 13px; font-weight: 
   .totals { grid-template-columns: 1fr 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------------------------------------------------------------- AI calls left (tab bar) */
+.tb-right { display: flex; align-items: center; gap: 10px; }
+.quota { font-family: var(--mono); font-size: 11px; letter-spacing: .02em; color: var(--chrome-fg); opacity: .75; white-space: nowrap; padding: 4px 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; }
+.quota.low { color: #f3c66b; border-color: #f3c66b; opacity: 1; }
+.quota.out { color: #ff9a85; border-color: #ff9a85; opacity: 1; }
+
+/* ---------------------------------------------------------------- project assistant panel */
+.body.with-panel { grid-template-columns: minmax(0, 1fr) 360px; }
+.body.with-panel.panel-closed { grid-template-columns: minmax(0, 1fr); }
+.panel { position: sticky; top: calc(var(--tabbar-h) + var(--toolnav-h)); height: calc(100vh - var(--tabbar-h) - var(--toolnav-h)); display: flex; flex-direction: column; border-left: 1px solid var(--rule-2); background: var(--paper-2); min-width: 0; }
+.panel-closed .panel { display: none; }
+.p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 16px 12px; border-bottom: 1px solid var(--rule-2); }
+.p-head b { display: block; font-family: var(--display); font-size: 18px; font-weight: 450; }
+.p-model { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.p-close { padding: 4px 10px; }
+.p-thread { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.p-u { align-self: flex-end; max-width: 88%; background: var(--ink); color: var(--paper); padding: 9px 13px; border-radius: 14px 14px 4px 14px; font-family: var(--ui); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.p-a { font-size: 15.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 370; }
+.p-empty p { font-size: 16px; color: var(--muted); margin: 4px 0 12px; }
+.p-sugg { display: block; width: 100%; text-align: left; margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--rule-2); background: var(--paper); color: var(--ink); font-family: var(--ui); font-size: 13.5px; cursor: pointer; }
+.p-sugg:hover { border-color: var(--accent); color: var(--accent); }
+.p-typing { padding: 4px 0; }
+.p-foot { padding: 10px 14px 14px; border-top: 1px solid var(--rule-2); }
+.p-box { display: flex; align-items: flex-end; gap: 8px; background: var(--paper); border: 1.5px solid var(--rule-2); border-radius: 14px; padding: 8px 8px 8px 12px; }
+.p-box:focus-within { border-color: var(--accent); }
+.p-box textarea { flex: 1; border: 0; outline: none; background: none; resize: none; font-family: var(--read); font-size: 15.5px; line-height: 1.45; max-height: 160px; color: var(--ink); }
+.p-box .send { width: 36px; height: 36px; border-radius: 10px; border: 0; background: var(--ink); color: var(--paper); cursor: pointer; display: grid; place-items: center; flex: none; }
+.p-box .send:hover { background: var(--accent); }
+.p-box .send:disabled { opacity: .45; cursor: default; }
+.p-box .send svg { width: 18px; height: 18px; }
+.p-note { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.p-left.out { color: var(--bad); }
+.panel-open { display: none; position: fixed; right: 20px; bottom: 20px; z-index: 50; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 999px; border: 0; background: var(--ink); color: var(--paper); font-family: var(--ui); font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: var(--shadow); }
+.panel-open svg { width: 18px; height: 18px; }
+.panel-closed .panel-open { display: flex; }
+@media (max-width: 900px) {
+  .body.with-panel { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: fixed; inset: auto 0 0 0; top: auto; height: 78vh; z-index: 70; border-left: 0; border-top: 1px solid var(--rule-2); border-radius: 18px 18px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.25); }
+  .quota { display: none; }
+}

@@ -49,7 +49,28 @@
 
   PR.api = function (path, body) {
     return fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-PaperRepro": "1" }, body: JSON.stringify(body || {}) })
-      .then(function (r) { return r.json().then(function (x) { if (!r.ok) throw new Error(x.error || "request failed"); return x; }); });
+      .then(function (r) { return r.json().then(function (x) {
+        if (x && x.quota) PR.setQuota(x.quota); else PR.refreshQuota();
+        if (!r.ok) throw new Error(x.error || "request failed"); return x;
+      }); });
+  };
+
+  /* the daily allowance of AI calls, counted on the server */
+  PR.setQuota = function (q) {
+    if (!q) return;
+    PR.D.quota = q;
+    var pill = document.getElementById("quota");
+    if (pill) {
+      pill.textContent = q.left + "/" + q.limit + " AI calls left";
+      pill.title = "Every AI action (a chat message, a citation run, a review, a caption) uses one call. Resets at midnight UTC.";
+      pill.classList.toggle("low", q.left <= 3); pill.classList.toggle("out", q.left === 0);
+    }
+    if (PR.onQuota) PR.onQuota(q);
+  };
+  var qT;
+  PR.refreshQuota = function () {
+    clearTimeout(qT);
+    qT = setTimeout(function () { PR.get("/api/quota").then(PR.setQuota).catch(function () {}); }, 300);
   };
   PR.get = function (path) { return fetch(path).then(function (r) { return r.json(); }); };
   var toastEl = document.getElementById("toast"), toastT;
@@ -163,6 +184,7 @@
     var nw = el("a", { class: "tb-new", href: "/", title: "New conversation", "aria-label": "New conversation" }, bar, "+");
     nw.addEventListener("click", function () { try { sessionStorage.setItem("pr-new-chat", "1"); } catch (e) {} });
     var right = el("div", { class: "tb-right" }, bar);
+    el("span", { class: "quota", id: "quota", role: "status" }, right);
     var th = el("button", { class: "ghost", type: "button", "aria-label": "Switch light or dark" }, right, "◐");
     th.addEventListener("click", function () {
       var cur = document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
@@ -237,7 +259,8 @@
   PR.boot = function () {
     try { var saved = localStorage.getItem("pr-theme"); if (saved) document.documentElement.setAttribute("data-theme", saved); } catch (e) {}
     tabbar();
-    if (PR.R) toolnav();
+    PR.setQuota(PR.D.quota);
+    if (PR.R) { toolnav(); if (PR.panel) PR.panel(); }
     var main = document.getElementById("main");
     if (PR.D.can_run) el("div", { class: "banner" }, main, "AI helpers are off: " + PR.D.can_run);
     var fn = PR.pages[PR.D.page];

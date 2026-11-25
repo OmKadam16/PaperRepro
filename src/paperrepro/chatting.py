@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+from paperrepro import guard
 from paperrepro.agents import research_guide
 from paperrepro.llm import LLM
 from paperrepro.state import Chat, ChatMessage, GapStudy
@@ -34,7 +35,7 @@ def turn(chat: Chat, llm: LLM, root: Path, studies: dict[str, GapStudy],
         out, t = research_guide.run(chat, latest_study(chat, studies), llm, tracer)
         with lock:
             chat.tokens_used += t
-            chat.messages.append(ChatMessage(role="assistant", text=out.reply))
+            chat.messages.append(ChatMessage(role="assistant", text=guard.check_reply(out.reply)))
             if chat.title == "New conversation":
                 first = next((m.text for m in chat.messages if m.role == "user"), "")
                 chat.title = (first[:70] + "…") if len(first) > 70 else first or chat.title
@@ -52,7 +53,7 @@ def turn(chat: Chat, llm: LLM, root: Path, studies: dict[str, GapStudy],
             out2, t2 = research_guide.run(chat, study if study.status == "ready" else None, llm, tracer, note=note)
             with lock:
                 chat.tokens_used += t2
-                chat.messages.append(ChatMessage(role="assistant", text=out2.reply))
+                chat.messages.append(ChatMessage(role="assistant", text=guard.check_reply(out2.reply)))
         with lock:
             chat.status = "ready"
     except Exception as e:
