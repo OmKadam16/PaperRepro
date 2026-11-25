@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" font-family="Georgia, 'Times New Roman', serif">
+  <title>Cite: your draft on the left, real sources on the right</title>
+  <rect width="1200" height="400" rx="22" fill="#ece5d6"/>
+
+  <!-- draft -->
+  <rect x="40" y="36" width="600" height="328" rx="14" fill="#fbf8f1"/>
+  <text x="70" y="78" font-family="Menlo, monospace" font-size="11" fill="#6c6556" letter-spacing="1.5">YOUR DRAFT</text>
+  <text x="70" y="114" font-size="21" fill="#1d1b17">2. Related work</text>
+  <g fill="#1d1b17" opacity=".16">
+    <rect x="70" y="136" width="540" height="8" rx="4"/><rect x="70" y="154" width="510" height="8" rx="4"/>
+  </g>
+  <rect x="64" y="170" width="552" height="58" rx="8" fill="#f8e7a6"/>
+  <text x="74" y="194" font-size="16.5" fill="#1d1b17">Teenagers who keep phones in bed sleep less on</text>
+  <text x="74" y="217" font-size="16.5" fill="#1d1b17">school nights</text>
+  <rect x="178" y="202" width="34" height="21" rx="5" fill="#2443a3"/>
+  <text x="195" y="217" text-anchor="middle" font-family="Menlo, monospace" font-size="12" fill="#fff">[1]</text>
+  <g fill="#1d1b17" opacity=".16">
+    <rect x="70" y="246" width="530" height="8" rx="4"/><rect x="70" y="264" width="490" height="8" rx="4"/>
+    <rect x="70" y="282" width="520" height="8" rx="4"/><rect x="70" y="300" width="300" height="8" rx="4"/>
+  </g>
+  <text x="70" y="342" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#6c6556">Numbered · IEEE · APA  —  export to Word or text</text>
+
+  <!-- connector -->
+  <path d="M618 200 C 660 200, 660 150, 700 150" fill="none" stroke="#2443a3" stroke-width="2" stroke-dasharray="5 5"/>
+
+  <!-- sources -->
+  <text x="700" y="78" font-family="Menlo, monospace" font-size="11" fill="#6c6556" letter-spacing="1.5">SOURCES FOR THIS SENTENCE</text>
+  <g transform="translate(700 98)">
+    <rect width="460" height="122" rx="12" fill="#fbf8f1" stroke="#2b7549" stroke-width="1.6"/>
+    <rect x="18" y="18" width="22" height="22" rx="6" fill="#2b7549"/>
+    <path d="M23.5 29.5l4 4 7.5-8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+    <rect x="54" y="24" width="300" height="11" rx="5.5" fill="#1d1b17" opacity=".55"/>
+    <text x="54" y="56" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#6c6556">Real OpenAlex record · year · DOI link</text>
+    <rect x="54" y="68" width="70" height="20" rx="10" fill="#2b7549"/>
+    <text x="89" y="82" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10.5" fill="#fff">supports</text>
+    <text x="54" y="108" font-size="13.5" fill="#6c6556" font-style="italic">“… quote taken word for word from the abstract …”</text>
+  </g>
+  <g transform="translate(700 232)">
+    <rect width="460" height="88" rx="12" fill="#fbf8f1"/>
+    <rect x="18" y="18" width="22" height="22" rx="6" fill="none" stroke="#1d1b17" stroke-opacity=".4" stroke-width="1.6"/>
+    <rect x="54" y="24" width="260" height="11" rx="5.5" fill="#1d1b17" opacity=".55"/>
+    <text x="54" y="56" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#6c6556">Real OpenAlex record · year · DOI link</text>
+    <rect x="54" y="64" width="70" height="18" rx="9" fill="none" stroke="#3b6aa0"/>
+    <text x="89" y="77" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" fill="#3b6aa0">related</text>
+  </g>
+  <text x="700" y="350" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#6c6556">Tick a source and the citation goes into your sentence.</text>
+</svg>

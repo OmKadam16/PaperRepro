@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" width="1200" height="330" font-family="Helvetica, Arial, sans-serif">
+  <title>The research journey: chat, then five tools in one project tab</title>
+  <rect width="1200" height="330" rx="22" fill="#fbf8f1"/>
+
+  <!-- chat -->
+  <g transform="translate(40 70)">
+    <rect width="190" height="150" rx="16" fill="#ece5d6"/>
+    <rect x="70" y="18" width="104" height="30" rx="12" fill="#1d1b17"/>
+    <rect x="82" y="30" width="80" height="6" rx="3" fill="#fbf8f1" opacity=".7"/>
+    <circle cx="28" cy="74" r="11" fill="#fbf8f1"/>
+    <path d="M23 74h10M28 69v10" stroke="#2443a3" stroke-width="1.6"/>
+    <g fill="#1d1b17" opacity=".2"><rect x="46" y="66" width="120" height="6" rx="3"/><rect x="46" y="80" width="96" height="6" rx="3"/></g>
+    <rect x="18" y="102" width="74" height="34" rx="6" fill="#fbf8f1" stroke="#a8740f" stroke-width="1.4"/>
+    <rect x="98" y="102" width="74" height="34" rx="6" fill="#fbf8f1" stroke="#a8740f" stroke-width="1.4"/>
+    <rect x="26" y="112" width="52" height="5" rx="2.5" fill="#1d1b17" opacity=".3"/>
+    <rect x="106" y="112" width="52" height="5" rx="2.5" fill="#1d1b17" opacity=".3"/>
+    <rect x="26" y="123" width="30" height="7" rx="3.5" fill="#2b7549"/>
+    <rect x="106" y="123" width="30" height="7" rx="3.5" fill="#2b7549"/>
+  </g>
+  <text x="135" y="260" text-anchor="middle" font-size="16" font-weight="bold" fill="#1d1b17">Chat</text>
+  <text x="135" y="282" text-anchor="middle" font-size="13" fill="#6c6556">describe your idea,</text>
+  <text x="135" y="300" text-anchor="middle" font-size="13" fill="#6c6556">get gap cards</text>
+
+  <!-- arrow into the tab -->
+  <path d="M244 145h40" stroke="#2443a3" stroke-width="2.4" stroke-dasharray="5 5"/>
+  <path d="M282 137l10 8-10 8" fill="none" stroke="#2443a3" stroke-width="2.4"/>
+  <text x="266" y="126" text-anchor="middle" font-family="Menlo, monospace" font-size="10.5" fill="#2443a3">START</text>
+
+  <!-- the tab -->
+  <rect x="306" y="40" width="860" height="250" rx="18" fill="#f3eddf" stroke="#1d1b17" stroke-opacity=".12"/>
+  <path d="M306 58a18 18 0 0 1 18-18h190v34H306z" fill="#1d1b17"/>
+  <text x="328" y="62" font-size="12.5" fill="#f3eee2">One project tab</text>
+
+  <line x1="400" y1="145" x2="1080" y2="145" stroke="#1d1b17" stroke-opacity=".2" stroke-width="2"/>
+  <g font-size="15" font-weight="bold" fill="#1d1b17" text-anchor="middle">
+    <g transform="translate(400 145)"><circle r="28" fill="#2b7549"/><text y="6" fill="#fff" font-family="Menlo, monospace" font-size="17">1</text></g>
+    <g transform="translate(570 145)"><circle r="28" fill="#fbf8f1" stroke="#1d1b17" stroke-width="2"/><text y="6" font-family="Menlo, monospace" font-size="17">2</text></g>
+    <g transform="translate(740 145)"><circle r="28" fill="#fbf8f1" stroke="#1d1b17" stroke-width="2"/><text y="6" font-family="Menlo, monospace" font-size="17">3</text></g>
+    <g transform="translate(910 145)"><circle r="28" fill="#fbf8f1" stroke="#1d1b17" stroke-width="2"/><text y="6" font-family="Menlo, monospace" font-size="17">4</text></g>
+    <g transform="translate(1080 145)"><circle r="28" fill="#fbf8f1" stroke="#1d1b17" stroke-width="2"/><text y="6" font-family="Menlo, monospace" font-size="17">5</text></g>
+    <text x="400" y="207">Gap &amp; question</text>
+    <text x="570" y="207">Plan</text>
+    <text x="740" y="207">Figures</text>
+    <text x="910" y="207">Cite</text>
+    <text x="1080" y="207">Review</text>
+  </g>
+  <g font-size="12.5" fill="#6c6556" text-anchor="middle">
+    <text x="400" y="230">the gap, its evidence,</text><text x="400" y="247">your question</text>
+    <text x="570" y="230">a paper template and</text><text x="570" y="247">section-by-section guide</text>
+    <text x="740" y="230">your data as charts</text><text x="740" y="247">at journal sizes</text>
+    <text x="910" y="230">real sources for</text><text x="910" y="247">every claim</text>
+    <text x="1080" y="230">a structured</text><text x="1080" y="247">peer review</text>
+  </g>
+  <text x="736" y="102" text-anchor="middle" font-size="12.5" fill="#6c6556" font-style="italic">plus a project assistant on the right of every tool</text>
+</svg>

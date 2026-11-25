@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460" font-family="Georgia, 'Times New Roman', serif">
+  <title>PaperRepro: a research workbench</title>
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#3a2a0a" flood-opacity=".22"/>
+    </filter>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#d6ccb6"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="460" rx="22" fill="#ece5d6"/>
+  <rect width="1200" height="460" rx="22" fill="url(#dots)" opacity=".7"/>
+
+  <!-- wordmark -->
+  <g transform="translate(70 120)">
+    <path d="M0 6c11-6 24-6 37 2v66c-13-8-26-8-37-2z" fill="none" stroke="#1d1b17" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M80 6c-11-6-24-6-37 2v66c13-8 26-8 37-2z" fill="none" stroke="#1d1b17" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M55 24h-5v30h5M68 24h5v30h-5M61.5 31v16" fill="none" stroke="#2443a3" stroke-width="3.2"/>
+  </g>
+  <text x="70" y="262" font-size="72" fill="#1d1b17" letter-spacing="-2">PaperRepro</text>
+  <text x="72" y="312" font-size="25" fill="#6c6556" font-style="italic">From a rough idea to a paper</text>
+  <text x="72" y="344" font-size="25" fill="#6c6556" font-style="italic">you can stand behind.</text>
+  <g font-family="Menlo, Consolas, monospace" font-size="13" fill="#2443a3" letter-spacing="1.5">
+    <text x="72" y="398">GAP · PLAN · FIGURES · CITE · REVIEW</text>
+  </g>
+
+  <!-- app window -->
+  <g transform="translate(560 58)" filter="url(#sh)">
+    <rect width="580" height="344" rx="14" fill="#fbf8f1"/>
+    <path d="M0 14a14 14 0 0 1 14-14h552a14 14 0 0 1 14 14v28H0z" fill="#1d1b17"/>
+    <!-- tabs -->
+    <rect x="112" y="10" width="112" height="32" rx="8" fill="#fbf8f1" opacity=".1"/>
+    <rect x="230" y="10" width="146" height="32" rx="8" fill="#fbf8f1"/>
+    <rect x="382" y="10" width="110" height="32" rx="8" fill="#fbf8f1" opacity=".1"/>
+    <circle cx="20" cy="22" r="5" fill="#8fa8ff"/>
+    <text x="34" y="27" font-family="Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#f3eee2">PaperRepro</text>
+    <text x="124" y="31" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#f3eee2" opacity=".8">Find research</text>
+    <rect x="240" y="19" width="15" height="15" rx="4" fill="#2443a3"/>
+    <text x="262" y="31" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#1d1b17">Sleep &amp; phones</text>
+    <rect x="392" y="19" width="15" height="15" rx="4" fill="#2443a3" opacity=".8"/>
+    <text x="414" y="31" font-family="Helvetica, Arial, sans-serif" font-size="11.5" fill="#f3eee2" opacity=".8">Soil carbon</text>
+    <rect x="502" y="16" width="64" height="20" rx="10" fill="none" stroke="#f3eee2" stroke-opacity=".35"/>
+    <text x="534" y="30" text-anchor="middle" font-family="Menlo, monospace" font-size="9.5" fill="#f3eee2" opacity=".85">14/15</text>
+
+    <!-- tool nav -->
+    <g font-family="Helvetica, Arial, sans-serif" font-size="10.5" fill="#6c6556">
+      <rect x="18" y="56" width="92" height="22" rx="11" fill="#1d1b17"/>
+      <text x="64" y="71" text-anchor="middle" fill="#fbf8f1">Gap &amp; question</text>
+      <text x="138" y="71">Plan</text><text x="186" y="71">Figures</text><text x="248" y="71">Cite</text><text x="294" y="71">Review</text>
+    </g>
+    <line x1="0" y1="92" x2="580" y2="92" stroke="#1d1b17" stroke-opacity=".12"/>
+
+    <!-- gap card -->
+    <rect x="18" y="108" width="372" height="214" rx="10" fill="#f3eddf"/>
+    <rect x="18" y="108" width="5" height="214" rx="2" fill="#a8740f"/>
+    <rect x="38" y="124" width="46" height="18" rx="4" fill="none" stroke="#2b7549" stroke-width="1.4"/>
+    <text x="61" y="137" text-anchor="middle" font-family="Menlo, monospace" font-size="10" fill="#2b7549">OPEN</text>
+    <text x="94" y="137" font-family="Menlo, monospace" font-size="10" fill="#6c6556">NOT YET STUDIED</text>
+    <text x="38" y="170" font-size="19" fill="#1d1b17">Does a phone put-away routine</text>
+    <text x="38" y="194" font-size="19" fill="#1d1b17">improve school-night sleep?</text>
+    <g fill="#1d1b17" opacity=".16">
+      <rect x="38" y="214" width="330" height="7" rx="3.5"/><rect x="38" y="230" width="300" height="7" rx="3.5"/><rect x="38" y="246" width="316" height="7" rx="3.5"/>
+    </g>
+    <text x="38" y="282" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#2443a3">Backed by 2 real papers · checked for novelty</text>
+    <rect x="38" y="292" width="118" height="22" rx="11" fill="#1d1b17"/>
+    <text x="97" y="307" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10.5" fill="#fbf8f1">Start research →</text>
+
+    <!-- assistant panel -->
+    <rect x="404" y="92" width="176" height="252" fill="#f3eddf"/>
+    <path d="M404 92v252" stroke="#1d1b17" stroke-opacity=".15"/>
+    <text x="418" y="118" font-size="13.5" fill="#1d1b17">Project assistant</text>
+    <rect x="470" y="132" width="98" height="30" rx="10" fill="#1d1b17"/>
+    <rect x="480" y="143" width="76" height="6" rx="3" fill="#fbf8f1" opacity=".7"/>
+    <g fill="#1d1b17" opacity=".22">
+      <rect x="418" y="176" width="148" height="6" rx="3"/><rect x="418" y="190" width="132" height="6" rx="3"/>
+      <rect x="418" y="204" width="142" height="6" rx="3"/><rect x="418" y="218" width="96" height="6" rx="3"/>
+    </g>
+    <rect x="416" y="290" width="152" height="34" rx="10" fill="#fbf8f1" stroke="#1d1b17" stroke-opacity=".2"/>
+    <rect x="542" y="297" width="20" height="20" rx="6" fill="#1d1b17"/>
+    <path d="M547 307h10M553 303l4 4-4 4" stroke="#fbf8f1" stroke-width="1.6" fill="none"/>
+  </g>
+</svg>
