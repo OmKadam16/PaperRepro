@@ -93,24 +93,36 @@ def semantic_scholar(query: str, client: httpx.Client, n: int = 8) -> list[Sourc
     return out
 
 
+def title_key(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", title.lower())[:140]
+
+
 def merge(into: dict[str, Source], found: list[Source]) -> list[str]:
-    """Add sources, merging duplicates (same DOI or title). Returns the ids, in order."""
+    """Add sources, merging duplicates: same id, or the same title under another DOI
+    (preprint and published versions, repository copies). Returns the ids, in order."""
     ids = []
+    by_title = {title_key(v.title): k for k, v in into.items()}
     for s in found:
+        twin = by_title.get(title_key(s.title))
+        if twin and twin != s.id:
+            s = s.model_copy(update={"id": twin})
         cur = into.get(s.id)
         if cur is None:
             into[s.id] = s
+            by_title[title_key(s.title)] = s.id
         else:
             cur.found_by = sorted(set(cur.found_by) | set(s.found_by))
             if not cur.abstract and s.abstract:
                 cur.abstract = s.abstract
+            if (s.cited_by or 0) > (cur.cited_by or 0):
+                cur.cited_by = s.cited_by  # versions split citations; keep the larger count
         if s.id not in ids:
             ids.append(s.id)
     return ids
 
 
 def search(queries: list[str], pool: dict[str, Source], client: httpx.Client,
-           per_query: int = 6) -> list[str]:
+           per_query: int = 10) -> list[str]:
     """Run each query against every available index; merge into pool; return candidate ids."""
     ids: list[str] = []
     use_s2 = bool(os.environ.get("SEMANTIC_SCHOLAR_API_KEY")) or os.environ.get("PAPERREPRO_S2", "") == "1"

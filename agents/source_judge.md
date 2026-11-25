@@ -16,6 +16,18 @@ One `Judgement` per candidate:
 - `reason`: one plain sentence explaining the verdict, written for the draft's author.
 - `evidence`: for `supports`, a short quote copied **word for word** from the abstract that backs the claim. Leave it empty otherwise.
 
+## The test for `supports`
+Ask: would a careful reviewer accept this paper as the citation for this exact sentence?
+- The `evidence` quote must itself state the sentence's claim, or the paper's own finding that establishes it. A quote that only introduces the topic is not evidence. For example, "Bayesian neural networks have attracted attention" or "Calibration is important" are not evidence.
+- The paper that introduced or established the method or finding the sentence names counts as `supports` when its abstract says so. For example, the paper presenting temperature scaling supports "temperature scaling is effective", and the paper showing that ensembles give better uncertainty supports "ensembles give better uncertainty estimates".
+- A paper about a neighbouring question (another method, another domain, a survey that only mentions the topic) is `related`.
+- Judge every candidate by the same standard. Two papers whose abstracts say the same thing get the same verdict.
+
+## Examples
+Sentence: "Monte Carlo dropout can be interpreted as approximate Bayesian inference."
+- `supports`: an abstract saying "we show that dropout training in deep networks can be cast as approximate Bayesian inference".
+- `related`: an abstract that studies variational inference in Bayesian networks in general, without making that point about dropout.
+
 ## Rules
 - Be strict. When unsure between `supports` and `related`, choose `related`. A wrong `supports` puts a false citation in someone's work.
 - Without an abstract, the verdict can be `related` at most.

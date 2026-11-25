@@ -21,7 +21,7 @@ from paperrepro.tools.segment import build_draft
 from paperrepro.trace import Tracer
 
 WORKERS = 4
-CANDIDATES = 10  # per sentence, sent to the judge
+CANDIDATES = 12  # per sentence, sent to the judge
 
 
 def _blocks_with_ocr(raw, llm: LLM, tracer: Tracer, project: Project) -> tuple[list[tuple[str, str]], int]:

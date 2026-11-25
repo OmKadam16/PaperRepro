@@ -38,12 +38,18 @@ def split_sentences(text: str) -> list[str]:
     return [s for s in out if s]
 
 
+def _looks_like_title(text: str) -> bool:
+    return len(text.split()) <= 16 and not text.rstrip().endswith((".", "?", "!", ":", ";", ","))
+
+
 def build_draft(blocks: list[tuple[str, str]]) -> Draft:
     """blocks: (kind, text) where kind is heading|body. Paragraphs after a References heading
     are kept for export but marked so they are never searched for citations."""
     draft, in_refs = Draft(), False
     for i, (kind, text) in enumerate(blocks):
         pid = f"p{i + 1}"
+        if i == 0 and kind == "body" and _looks_like_title(text):
+            kind = "heading"  # a short first line with no full stop is the title
         if kind == "heading":
             in_refs = bool(REF_HEADINGS.match(text))
             draft.paragraphs.append(Paragraph(id=pid, kind="heading", sentences=[Sentence(id=f"{pid}s1", text=text)]))
