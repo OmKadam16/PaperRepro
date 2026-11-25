@@ -21,9 +21,9 @@ T = TypeVar("T", bound=BaseModel)
 OPENAI_DEFAULT = "gpt-6.1-terra"
 OPENAI_DEFAULTS = {"ocr": "gpt-6.1-terra", "claim_finder": "gpt-6.1-terra", "source_judge": "gpt-6.1-terra",
                    "idea_framer": "gpt-6.1-terra", "gap_analyst": "gpt-6.2-sol", "novelty_checker": "gpt-6.1-terra",
-                   "reviewer": "gpt-6.2-sol", "caption_writer": "gpt-6.1-terra"}
+                   "reviewer": "gpt-6.2-sol", "caption_writer": "gpt-6.1-terra", "research_guide": "gpt-6.1-terra"}
 OPENAI_EFFORT = {"ocr": "low", "claim_finder": "low", "source_judge": "medium", "idea_framer": "low",
-                 "gap_analyst": "medium", "novelty_checker": "medium", "reviewer": "medium", "caption_writer": "low"}
+                 "gap_analyst": "medium", "novelty_checker": "medium", "reviewer": "medium", "caption_writer": "low", "research_guide": "low"}
 ANTHROPIC_DEFAULT = "claude-sonnet-5-5"
 
 

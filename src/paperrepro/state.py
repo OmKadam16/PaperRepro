@@ -107,6 +107,7 @@ class Project(BaseModel):
     chosen: dict[str, list[str]] = Field(default_factory=dict)  # sentence_id -> source ids, in order
     style: Style = "numbered"
     tokens_used: int = 0
+    research_id: str = ""  # the research project (tab) this draft belongs to
 
     def dir(self, root: Path) -> Path:
         return root / self.id
@@ -132,6 +133,7 @@ class Record(BaseModel):
     progress: str = ""
     error: str = ""
     tokens_used: int = 0
+    research_id: str = ""  # the research project (tab) this belongs to; "" for chats/studies
 
     KIND: ClassVar[str] = "record"
 
@@ -274,3 +276,38 @@ class Figure(Record):
     spec: FigureSpec = Field(default_factory=FigureSpec)
     caption: str = ""
     alt_text: str = ""
+
+
+# ================================================================ chat + research projects
+class ChatTurn(BaseModel):
+    """LLM output of the Research Guide for one turn."""
+    reply: str = Field(description="what you say to the researcher, in plain conversational prose")
+    action: Literal["reply", "search"] = Field(description="'search' to run a literature gap search now, else 'reply'")
+    search_idea: str = Field(default="", description="for 'search': the idea to search, self-contained and specific")
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str = ""
+    study_id: str = ""  # set when this message carries a gap study's results
+    at: float = Field(default_factory=time.time)
+
+
+class Chat(Record):
+    KIND: ClassVar[str] = "chat"
+    status: Literal["queued", "working", "ready", "error"] = "ready"
+    title: str = "New conversation"
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
+class Research(Record):
+    """A research project: one browser-like tab holding its own plan, figures, drafts, reviews."""
+    KIND: ClassVar[str] = "research"
+    status: Literal["queued", "working", "ready", "error"] = "ready"
+    title: str
+    question: str = ""
+    gap: CheckedGap | None = None
+    papers: dict[str, Source] = Field(default_factory=dict)  # the gap's evidence papers
+    study_id: str = ""
+    chat_id: str = ""
+    template: str = "article"

@@ -33,13 +33,19 @@
     review: ["M4.5 12.5 9 17 19.5 6.5", "M4 4.5h7M4 8h4"],
     upload: ["M7 17.5h-.5a4 4 0 0 1-.6-7.96 6 6 0 0 1 11.7-1.5A4.5 4.5 0 0 1 17.5 17.5H17", "M12 12v8.5", "M9 15l3-3 3 3"],
   };
-  PR.STAGES = [
-    { key: "gap", n: 1, name: "Find a gap", ds: "your idea → open questions", href: "/gap" },
-    { key: "plan", n: 2, name: "Plan", ds: "templates & writing guide", href: "/plan" },
-    { key: "figures", n: 3, name: "Figures", ds: "your data → journal charts", href: "/figures" },
-    { key: "cite", n: 4, name: "Cite", ds: "sources for every claim", href: "/cite" },
-    { key: "review", n: 5, name: "Review", ds: "is the paper ready?", href: "/review" },
+  PR.ICONS.chat = ["M4 5.5h16v10H9l-5 4z", "M8 9.5h8M8 12.5h5"];
+  PR.ICONS.overview = PR.ICONS.gap;
+  PR.ICONS.send = ["M5 12h14", "M13 6l6 6-6 6"];
+  PR.TOOLS = [
+    { key: "overview", n: 1, name: "Gap & question", ds: "the baseline this research starts from", path: "" },
+    { key: "plan", n: 2, name: "Plan", ds: "template & writing guide", path: "/plan" },
+    { key: "figures", n: 3, name: "Figures", ds: "your data → journal charts", path: "/figures" },
+    { key: "cite", n: 4, name: "Cite", ds: "sources for every claim", path: "/cite" },
+    { key: "review", n: 5, name: "Review", ds: "is the paper ready?", path: "/review" },
   ];
+  PR.STAGES = PR.TOOLS;  // older page code calls them stages
+  PR.R = PR.D.research || null;
+  PR.link = function (path) { return PR.R ? "/r/" + PR.R.id + (path || "") : (path || "/"); };
 
   PR.api = function (path, body) {
     return fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-PaperRepro": "1" }, body: JSON.stringify(body || {}) })
@@ -124,27 +130,40 @@
     })();
   };
 
-  function rail() {
-    var r = document.getElementById("rail"), D = PR.D, counts = D.counts || {};
-    var b = el("a", { class: "brand", href: "/", "aria-label": "PaperRepro dashboard" }, r);
+  function brand(parent) {
+    var b = el("a", { class: "tb-brand", href: "/", "aria-label": "PaperRepro home" }, parent);
     var s = el("svg:svg", { viewBox: "0 0 32 32", "aria-hidden": "true" }, b);
     el("svg:path", { d: "M5 7.5c3-1.6 6.6-1.6 10 .5v18c-3.4-2.1-7-2.1-10-.5z", fill: "none", stroke: "currentColor", "stroke-width": 1.6, "stroke-linejoin": "round" }, s);
     el("svg:path", { d: "M27 7.5c-3-1.6-6.6-1.6-10 .5v18c3.4-2.1 7-2.1 10-.5z", fill: "none", stroke: "currentColor", "stroke-width": 1.6, "stroke-linejoin": "round" }, s);
-    el("svg:path", { d: "M20 12.5h-1.5v8H20M24 12.5h1.5v8H24M22 14.5v4", fill: "none", stroke: "var(--accent)", "stroke-width": 1.6 }, s);
+    el("svg:path", { d: "M20 12.5h-1.5v8H20M24 12.5h1.5v8H24M22 14.5v4", fill: "none", stroke: "#8fa8ff", "stroke-width": 1.6 }, s);
     el("b", {}, b, "PaperRepro");
-    var home = el("a", { class: "r-home", href: "/", "aria-current": D.section === "home" ? "page" : null }, r);
-    PR.icon(home, PR.ICONS.home); el("span", {}, home, "Dashboard");
-    el("div", { class: "r-label" }, r, "The research process");
-    var ol = el("ol", { class: "line" }, r);
-    PR.STAGES.forEach(function (st) {
-      var li = el("li", {}, ol);
-      var a = el("a", { href: st.href, class: counts[st.key] ? "has" : null, "aria-current": D.section === st.key ? "page" : null }, li);
-      el("span", { class: "stn" }, a, counts[st.key] ? "✓" : String(st.n));
-      var t = el("span", {}, a); el("div", { class: "nm" }, t, st.name); el("div", { class: "ds" }, t, st.ds);
+  }
+  function initials(t) { return (t || "?").replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase() || "R"; }
+
+  function tabbar() {
+    var bar = document.getElementById("tabbar"), D = PR.D;
+    bar.textContent = "";
+    brand(bar);
+    var home = el("a", { class: "tab home", href: "/", "aria-current": PR.D.page === "chat" ? "page" : null, title: "Find a research gap" }, bar);
+    var hd = el("span", { class: "dot" }, home); PR.icon(hd, PR.ICONS.chat);
+    el("span", { class: "ti" }, home, "Find research");
+    (D.tabs || []).forEach(function (t) {
+      var a = el("a", { class: "tab", href: "/r/" + t.id, title: t.title, "aria-current": PR.R && PR.R.id === t.id ? "page" : null }, bar);
+      el("span", { class: "dot" }, a, initials(t.title));
+      el("span", { class: "ti" }, a, t.title);
+      var x = el("button", { class: "x", type: "button", "aria-label": "Close " + t.title }, a, "✕");
+      x.addEventListener("click", function (e) {
+        e.preventDefault(); e.stopPropagation();
+        PR.api("/api/tabs/close", { id: t.id }).then(function (s) {
+          if (PR.R && PR.R.id === t.id) { location.href = s.tabs.length ? "/r/" + s.tabs[s.tabs.length - 1].id : "/"; return; }
+          PR.D.tabs = s.tabs; tabbar();
+        });
+      });
     });
-    var f = el("div", { class: "rail-foot" }, r);
-    el("span", {}, f, "runs on this computer");
-    var th = el("button", { class: "ghost", type: "button", "aria-label": "Switch light or dark" }, f, "◐ theme");
+    var nw = el("a", { class: "tb-new", href: "/", title: "New conversation", "aria-label": "New conversation" }, bar, "+");
+    nw.addEventListener("click", function () { try { sessionStorage.setItem("pr-new-chat", "1"); } catch (e) {} });
+    var right = el("div", { class: "tb-right" }, bar);
+    var th = el("button", { class: "ghost", type: "button", "aria-label": "Switch light or dark" }, right, "◐");
     th.addEventListener("click", function () {
       var cur = document.documentElement.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       var next = cur === "dark" ? "light" : "dark";
@@ -153,9 +172,72 @@
     });
   }
 
+  /* left sidebar on the chat page: research projects + conversations */
+  PR.side = function (activeChat) {
+    var body = document.getElementById("body"), D = PR.D;
+    body.classList.add("with-side");
+    var side = el("aside", { class: "side", "aria-label": "Your research" });
+    body.insertBefore(side, body.firstChild);
+    var nb = el("a", { class: "btn newchat", href: "/" }, side, "+ New conversation");
+    nb.addEventListener("click", function () { try { sessionStorage.setItem("pr-new-chat", "1"); } catch (e) {} });
+    el("h6", {}, side, "Research projects");
+    if (!(D.researches || []).length) el("div", { class: "none" }, side, "Start research from a gap and it appears here, in its own tab.");
+    (D.researches || []).forEach(function (r) {
+      var a = el("a", { class: "it", href: "/r/" + r.id }, side);
+      el("span", { class: "t" }, a, r.title);
+      el("span", { class: "sub" }, a, [r.figures + " fig", r.drafts + " draft", r.reviews + " review"].join(" · ") + (r.open ? " · open" : ""));
+    });
+    el("h6", {}, side, "Conversations");
+    if (!(D.chats || []).length) el("div", { class: "none" }, side, "No conversations yet.");
+    (D.chats || []).forEach(function (c) {
+      var a = el("a", { class: "it", href: "/chat/" + c.id, "aria-current": activeChat === c.id ? "page" : null }, side);
+      el("span", { class: "t" }, a, c.title); el("span", { class: "sub" }, a, PR.ago(c.created_at) + (c.busy ? " · thinking…" : ""));
+    });
+  };
+
+  /* inside a research tab: the tools of this project, in research order */
+  function toolnav() {
+    var R = PR.R, body = document.getElementById("body");
+    var nav = el("nav", { class: "toolnav", "aria-label": "Tools for this research" });
+    body.parentNode.insertBefore(nav, body);
+    el("div", { class: "rtitle", title: R.title }, nav, R.title);
+    var has = { overview: !!R.question, plan: R.template && R.template !== "", figures: R.figures, cite: R.drafts, review: R.reviews };
+    var cnt = { figures: R.figures, cite: R.citations ? R.citations + " cited" : R.drafts, review: R.reviews };
+    PR.TOOLS.forEach(function (t, i) {
+      if (i) el("span", { class: "sep", "aria-hidden": "true" }, nav);
+      var a = el("a", { href: PR.link(t.path), class: t.key !== "plan" && has[t.key] ? "has" : null, "aria-current": PR.D.tool === t.key ? "page" : null }, nav);
+      el("span", { class: "n" }, a, t.key !== "plan" && has[t.key] ? "✓" : String(t.n));
+      a.appendChild(document.createTextNode(t.name));
+      if (cnt[t.key]) el("span", { class: "c" }, a, String(cnt[t.key]));
+    });
+  }
+
+  /* paper references inside helper prose: «id» -> a linked short citation */
+  PR.paperRefs = function (parent, text, papers) {
+    String(text || "").split(/«([^»]+)»/).forEach(function (part, i) {
+      if (i % 2 === 0) { parent.appendChild(document.createTextNode(part)); return; }
+      var p = papers[part];
+      if (!p) { parent.appendChild(document.createTextNode("a paper")); return; }
+      var u = PR.safeUrl(p.url), label = (p.authors[0] ? p.authors[0].split(" ").slice(-1)[0] + (p.authors.length > 1 ? " et al." : "") : PR.short(p.title, 30)) + " " + (p.year || "");
+      if (u) el("a", { href: u, target: "_blank", rel: "noopener noreferrer", title: p.title, style: "color:var(--accent)" }, parent, label);
+      else el("span", { title: p.title }, parent, label);
+    });
+  };
+  PR.paperLine = function (parent, p) {
+    if (!p) return;
+    var r = el("div", { class: "paperline" }, parent);
+    el("span", { class: "y" }, r, String(p.year || "n.d."));
+    var t = el("span", {}, r), u = PR.safeUrl(p.url);
+    if (u) el("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, t, p.title); else t.textContent = p.title;
+    t.appendChild(document.createTextNode("  · " + PR.authors(p.authors)));
+  };
+  PR.NOVELTY = { open: "OPEN", partly_addressed: "PARTLY ADDRESSED", addressed: "ADDRESSED", unchecked: "NOT CHECKED" };
+  PR.KIND = { unstudied: "not yet studied", contradictory: "findings conflict", narrow_evidence: "thin evidence", method: "needs a better method", population: "untested setting", replication: "needs replication" };
+
   PR.boot = function () {
     try { var saved = localStorage.getItem("pr-theme"); if (saved) document.documentElement.setAttribute("data-theme", saved); } catch (e) {}
-    rail();
+    tabbar();
+    if (PR.R) toolnav();
     var main = document.getElementById("main");
     if (PR.D.can_run) el("div", { class: "banner" }, main, "AI helpers are off: " + PR.D.can_run);
     var fn = PR.pages[PR.D.page];

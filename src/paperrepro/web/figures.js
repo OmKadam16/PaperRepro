@@ -164,12 +164,12 @@
       "Paste your data and get a chart sized for your venue, in colorblind-safe or grayscale palettes, with clean axes and real error bars. Export SVG for the journal or PNG at 300 dpi.", right);
     nb.addEventListener("click", function () {
       nb.disabled = true;
-      PR.api("/api/figures", { title: "Accuracy over training", csv: SAMPLE, spec: { chart: "line", x: "epoch", ys: ["baseline", "ensemble"], errors: { baseline: "baseline_sd", ensemble: "ensemble_sd" }, xlabel: "Epoch", ylabel: "Test accuracy" } })
-        .then(function (f) { location.href = "/figures/" + f.id; }).catch(function (e) { PR.toast(e.message); nb.disabled = false; });
+      PR.api("/api/figures", { research_id: PR.R.id, title: "Accuracy over training", csv: SAMPLE, spec: { chart: "line", x: "epoch", ys: ["baseline", "ensemble"], errors: { baseline: "baseline_sd", ensemble: "ensemble_sd" }, xlabel: "Epoch", ylabel: "Test accuracy" } })
+        .then(function (f) { location.href = PR.link("/figures/" + f.id); }).catch(function (e) { PR.toast(e.message); nb.disabled = false; });
     });
     PR.ledger(main, D.figures || [], {
       empty: "No figures yet. Start one with “New figure”; it opens with sample data you can replace.", icon: "figures",
-      href: function (f) { return "/figures/" + f.id; }, title: function (f) { return f.title; }, sub: function (f) { return f.chart + " chart"; },
+      href: function (f) { return PR.link("/figures/" + f.id); }, title: function (f) { return f.title; }, sub: function (f) { return f.chart + " chart"; },
     });
   };
 
@@ -177,7 +177,7 @@
     var F = D.figure, sp = JSON.parse(JSON.stringify(F.spec)), data = parseCSV(F.csv), saveT;
     document.title = "PaperRepro: " + F.title;
     var top = el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;flex-wrap:wrap" }, main);
-    el("a", { class: "ghost", href: "/figures", style: "text-decoration:none" }, top, "← all figures");
+    el("a", { class: "ghost", href: PR.link("/figures"), style: "text-decoration:none" }, top, "← all figures");
     var saved = el("span", { class: "msg", style: "margin:0" }, top, "saved");
     var grid = el("div", { class: "fig-grid" }, main);
     var side = el("aside", { class: "sheet fig-side" }, grid), stageCol = el("div", {}, grid);

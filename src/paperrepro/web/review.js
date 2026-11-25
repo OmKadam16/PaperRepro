@@ -27,9 +27,9 @@
       if (!f) return;
       if (!/\.(pdf|docx|txt|md|markdown|tex)$/i.test(f.name)) return fail("Use a PDF, a Word file (.docx) or a text file.");
       choose.disabled = true; msg.className = "msg"; msg.textContent = "Uploading " + f.name + "…";
-      fetch("/api/review/upload", { method: "POST", headers: { "X-PaperRepro": "1", "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" }, body: f })
+      fetch("/api/review/upload", { method: "POST", headers: { "X-PaperRepro": "1", "X-Research": PR.R.id, "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" }, body: f })
         .then(function (r) { return r.json().then(function (x) { if (!r.ok) throw new Error(x.error); return x; }); })
-        .then(function (x) { location.href = "/review/" + x.id; }).catch(function (e) { fail(e.message); });
+        .then(function (x) { location.href = PR.link("/review/" + x.id); }).catch(function (e) { fail(e.message); });
     }
     choose.addEventListener("click", function () { file.click(); });
     file.addEventListener("change", function () { up(file.files[0]); });
@@ -40,7 +40,7 @@
     go.addEventListener("click", function () {
       if (ta.value.trim().length < 40) return fail("Paste at least a few sentences.");
       go.disabled = true;
-      PR.api("/api/review/paste", { text: ta.value, title: ta.value.trim().split("\n")[0].slice(0, 60) }).then(function (x) { location.href = "/review/" + x.id; }).catch(function (e) { fail(e.message); });
+      PR.api("/api/review/paste", { research_id: PR.R.id, text: ta.value, title: ta.value.trim().split("\n")[0].slice(0, 60) }).then(function (x) { location.href = PR.link("/review/" + x.id); }).catch(function (e) { fail(e.message); });
     });
     el("p", { class: "lab", style: "margin:0 0 14px" }, left, "What you get");
     [["Six scores", "originality, clarity, methods, evidence, structure and significance, each explained"],
@@ -53,7 +53,7 @@
     });
     el("h2", { style: "font-family:var(--display);font-weight:390;font-size:27px;margin:56px 0 16px" }, main, "Your reviews");
     PR.ledger(main, D.reviews || [], {
-      empty: "No reviews yet.", icon: "review", href: function (r) { return "/review/" + r.id; }, title: function (r) { return r.title; },
+      empty: "No reviews yet.", icon: "review", href: function (r) { return PR.link("/review/" + r.id); }, title: function (r) { return r.title; },
       sub: function (r) { return r.recommendation ? REC[r.recommendation][0] : r.progress; },
     });
   };
@@ -80,7 +80,7 @@
     main.textContent = "";
     document.title = "PaperRepro: review of " + (R.draft.title || R.filename);
     var top = el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;gap:12px" }, main);
-    el("a", { class: "ghost", href: "/review", style: "text-decoration:none" }, top, "← all reviews");
+    el("a", { class: "ghost", href: PR.link("/review"), style: "text-decoration:none" }, top, "← all reviews");
     el("span", { class: "when" }, top, PR.ago(R.created_at) + (R.tokens_used ? " · " + Math.round(R.tokens_used / 1000) + "k tokens" : ""));
     var h = el("header", { class: "page-head" }, main), l = el("div", {}, h);
     el("span", { class: "stage" }, l, "Stage 5 of 5 · Review");
@@ -136,8 +136,8 @@
       row(M.has_references, "Reference list", M.has_references ? "yes" : "no");
       row(M.passive_ratio < 0.4, "Sentences in the passive voice", Math.round(M.passive_ratio * 100) + "%");
       var nx = el("div", { style: "display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 26px" }, right);
-      if (M.citation_markers < 5 || !M.has_references) el("a", { class: "btn sm", href: "/cite" }, nx, "Find sources for it →");
-      if (M.sections_missing.length) el("a", { class: "btn line sm", href: "/plan" }, nx, "See the section guide →");
+      if (M.citation_markers < 5 || !M.has_references) el("a", { class: "btn sm", href: PR.link("/cite") }, nx, "Find sources for it →");
+      if (M.sections_missing.length) el("a", { class: "btn line sm", href: PR.link("/plan") }, nx, "See the section guide →");
     }
     if (rv && rv.strengths.length) {
       el("h2", { style: "font-family:var(--display);font-weight:390;font-size:26px;margin:0 0 14px" }, right, "What works");

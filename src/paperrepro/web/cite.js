@@ -33,11 +33,11 @@
       if (!/\.(pdf|docx|txt|md|markdown|tex)$/i.test(f.name)) return fail("Use a PDF, a Word file (.docx) or a text file.");
       if (f.size > 25 * 1024 * 1024) return fail("That file is over 25 MB.");
       busy("Uploading " + f.name + "…");
-      fetch(endpoint, { method: "POST", headers: { "X-PaperRepro": "1", "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" }, body: f })
+      fetch(endpoint, { method: "POST", headers: { "X-PaperRepro": "1", "X-Research": PR.R.id, "X-Filename": encodeURIComponent(f.name), "Content-Type": "application/octet-stream" }, body: f })
         .then(function (r) { return r.json().then(function (x) { if (!r.ok) throw new Error(x.error); return x; }); })
         .then(function (x) { onId(x.id); }).catch(function (e) { fail(e.message || "Upload failed."); });
     };
-    function up(f) { choose.disabled = true; PR.uploadFile(f, "/api/upload", function (id) { location.href = "/d/" + id; }); }
+    function up(f) { choose.disabled = true; PR.uploadFile(f, "/api/upload", function (id) { location.href = PR.link("/d/" + id); }); }
     choose.addEventListener("click", function () { file.click(); });
     file.addEventListener("change", function () { up(file.files[0]); });
     ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
@@ -47,8 +47,8 @@
     go.addEventListener("click", function () {
       if (ta.value.trim().length < 40) return fail("Paste at least a few sentences.");
       go.disabled = true; busy("Sending…");
-      PR.api("/api/paste", { text: ta.value, title: ta.value.trim().split("\n")[0].slice(0, 60) })
-        .then(function (x) { location.href = "/d/" + x.id; }).catch(function (e) { fail(e.message); });
+      PR.api("/api/paste", { research_id: PR.R.id, text: ta.value, title: ta.value.trim().split("\n")[0].slice(0, 60) })
+        .then(function (x) { location.href = PR.link("/d/" + x.id); }).catch(function (e) { fail(e.message); });
     });
 
     el("p", { class: "lab", style: "margin:0 0 14px" }, left, "How it works");
@@ -63,7 +63,7 @@
     el("h2", { style: "font-family:var(--display);font-weight:390;font-size:27px;margin:60px 0 16px" }, main, "Your drafts");
     PR.ledger(main, D.drafts || [], {
       empty: "Nothing here yet. Your first draft will appear here.", icon: "cite",
-      href: function (d) { return "/d/" + d.id; }, title: function (d) { return d.title || d.filename; },
+      href: function (d) { return PR.link("/d/" + d.id); }, title: function (d) { return d.title || d.filename; },
       sub: function (d) { return d.status === "ready" ? d.with_sources + " of " + d.claims + " claims have sources · " + d.cited + " cited" : d.status === "error" ? "stopped" : d.progress; },
     });
   };
@@ -109,7 +109,7 @@
 
   function drawBar(bi) {
     bi.textContent = "";
-    el("a", { class: "ghost", href: "/cite", style: "text-decoration:none" }, bi, "← drafts");
+    el("a", { class: "ghost", href: PR.link("/cite"), style: "text-decoration:none" }, bi, "← drafts");
     el("div", { class: "docname", title: P.filename }, bi, P.draft.title || P.filename);
     var meter = el("div", { class: "meter" }, bi);
     function m(n, t) { var s = el("span", {}, meter); el("b", {}, s, String(n)); s.appendChild(document.createTextNode(" " + t)); }

@@ -1,7 +1,8 @@
 """PaperRepro web app: `paperrepro serve` -> http://127.0.0.1:8765
 
-Pages follow the research process: dashboard, 1 gap, 2 plan, 3 figures, 4 cite, 5 review.
-AI jobs run one at a time in a background worker; pages poll for progress.
+Home is a chat with the Research Guide, which finds research gaps. "Start research" on a
+gap creates a research project that opens as a tab; each tab has its own tools (overview,
+plan, figures, cite, review) holding only that project's work.
 
 Safety: binds 127.0.0.1 only, checks Host and Origin, requires a custom header on every
 write (blocks cross-site posts), validates ids, sizes, types; static files are a fixed set.
@@ -22,18 +23,30 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from pydantic import ValidationError
 
 from paperrepro import cite, figures, templates
-from paperrepro.state import Figure, FigureSpec, GapStudy, Project, Record, Review
+from paperrepro.state import (
+    Chat,
+    ChatMessage,
+    Figure,
+    FigureSpec,
+    GapStudy,
+    Project,
+    Record,
+    Research,
+    Review,
+)
 from paperrepro.tools.reader import MAX_BYTES
 
 ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 SID = re.compile(r"^p\d+s\d+$")
 MAX_TEXT = 400_000
+MAX_CHAT = 4000
 STYLES = ("numbered", "ieee", "apa")
-STATIC = {"app.css": "text/css", "core.js": "text/javascript", "dashboard.js": "text/javascript",
-          "gap.js": "text/javascript", "plan.js": "text/javascript", "figures.js": "text/javascript",
-          "cite.js": "text/javascript", "review.js": "text/javascript"}
+TOOLS = ("overview", "plan", "figures", "cite", "review")
+STATIC = {name: ("text/css" if name.endswith(".css") else "text/javascript") for name in
+          ("app.css", "core.js", "chat.js", "research.js", "plan.js", "figures.js", "cite.js", "review.js")}
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 DOC_EXT = re.compile(r"\.(pdf|docx|txt|md|markdown|tex)$", re.I)
+EARLIER = "Earlier work"
 
 
 class Desk:
@@ -45,6 +58,9 @@ class Desk:
         self.gaps: dict[str, GapStudy] = {}
         self.reviews: dict[str, Review] = {}
         self.figures: dict[str, Figure] = {}
+        self.chats: dict[str, Chat] = {}
+        self.research: dict[str, Research] = {}
+        self.tabs: list[str] = []
         self.locks: dict[str, threading.RLock] = {}
         self.busy: dict[str, str] = {}
         self.q: queue.Queue = queue.Queue()
@@ -53,6 +69,7 @@ class Desk:
         self._load()
         threading.Thread(target=self._work, daemon=True).start()
 
+    # ---------------------------------------------------------------- persistence
     def _load(self) -> None:
         stopped = "Interrupted: the server stopped while this was running. Start it again."
         for f in sorted(self.root.glob("*/project.json")):
@@ -63,7 +80,8 @@ class Desk:
             if p.status not in ("ready", "error"):
                 p.status, p.error = "error", stopped
             self.projects[p.id] = p
-        for cls, store in ((GapStudy, self.gaps), (Review, self.reviews), (Figure, self.figures)):
+        for cls, store in ((GapStudy, self.gaps), (Review, self.reviews), (Figure, self.figures),
+                           (Chat, self.chats), (Research, self.research)):
             for f in sorted((self.root / cls.KIND).glob(f"*/{cls.KIND}.json")):
                 try:
                     r = cls.model_validate_json(f.read_text())
@@ -72,19 +90,50 @@ class Desk:
                 if r.status in ("queued", "working"):
                     r.status, r.error = "error", stopped
                 store[r.id] = r
+        tabs = self.root / "tabs.json"
+        if tabs.exists():
+            try:
+                self.tabs = [t for t in json.loads(tabs.read_text()) if t in self.research]
+            except (json.JSONDecodeError, TypeError):
+                self.tabs = []
+        self._adopt_orphans()
+
+    def _adopt_orphans(self) -> None:
+        """Work made before research tabs existed goes into one 'Earlier work' project."""
+        orphans = [r for r in (*self.projects.values(), *self.figures.values(), *self.reviews.values()) if not r.research_id]
+        if not orphans:
+            return
+        home = next((r for r in self.research.values() if r.title == EARLIER), None)
+        if home is None:
+            home = Research(title=EARLIER, question="Drafts, figures and reviews made before research projects existed.")
+            home.save(self.root)
+            self.research[home.id] = home
+        for r in orphans:
+            r.research_id = home.id
+            r.save(self.root)
+
+    def save_tabs(self) -> None:
+        (self.root / "tabs.json").write_text(json.dumps(self.tabs))
+
+    def open_tab(self, rid: str) -> None:
+        if rid in self.research and rid not in self.tabs:
+            self.tabs.append(rid)
+            self.save_tabs()
 
     def lock(self, rid: str) -> threading.RLock:
         with self.guard:
             return self.locks.setdefault(rid, threading.RLock())
 
+    # ---------------------------------------------------------------- jobs
     def enqueue(self, kind: str, rid: str, arg=None) -> None:
         self.busy[rid] = kind if kind != "find" else f"find:{arg}"
         self.q.put((kind, rid, arg))
 
     def _work(self) -> None:
+        stores = {"process": self.projects, "find": self.projects, "gap": self.gaps, "review": self.reviews, "chat": self.chats}
         while True:
             kind, rid, arg = self.q.get()
-            rec = {"process": self.projects, "find": self.projects, "gap": self.gaps, "review": self.reviews}[kind][rid]
+            rec = stores[kind][rid]
             try:
                 self.jobs[kind](rec, arg, self.root, self.lock(rid))
             except Exception as e:
@@ -93,34 +142,28 @@ class Desk:
             finally:
                 self.busy.pop(rid, None)
 
-    # ---------------------------------------------------------------- summaries
-    def counts(self) -> dict:
-        return {"gap": len(self.gaps), "figures": len(self.figures), "cite": len(self.projects),
-                "review": len(self.reviews), "plan_visited": (self.root / ".plan_visited").exists()}
+    # ---------------------------------------------------------------- views
+    def research_counts(self, rid: str) -> dict:
+        return {"figures": sum(f.research_id == rid for f in self.figures.values()),
+                "drafts": sum(p.research_id == rid for p in self.projects.values()),
+                "citations": sum(len(v) for p in self.projects.values() if p.research_id == rid for v in p.chosen.values()),
+                "reviews": sum(r.research_id == rid for r in self.reviews.values())}
 
-    def recent(self, n: int = 8) -> list[dict]:
-        items = []
-        for g in self.gaps.values():
-            items.append({"kind": "gap", "kind_label": "gap study", "title": g.idea[:90], "href": f"/gap/{g.id}",
-                          "sub": g.progress or g.status, "status": g.status, "created_at": g.created_at})
-        for p in self.projects.values():
-            items.append({"kind": "draft", "kind_label": "draft", "title": p.draft.title or p.filename, "href": f"/d/{p.id}",
-                          "sub": f"{sum(1 for v in p.chosen.values() if v)} cited" if p.status == "ready" else p.progress,
-                          "status": p.status, "created_at": p.created_at})
-        for r in self.reviews.values():
-            items.append({"kind": "review", "kind_label": "review", "title": r.draft.title or r.filename, "href": f"/review/{r.id}",
-                          "sub": r.progress or r.status, "status": r.status, "created_at": r.created_at})
-        for f in self.figures.values():
-            items.append({"kind": "figure", "kind_label": "figure", "title": f.title, "href": f"/figures/{f.id}",
-                          "sub": f.spec.chart + " chart", "status": f.status, "created_at": f.created_at})
-        return sorted(items, key=lambda x: -x["created_at"])[:n]
+    def shell(self) -> dict:
+        """What every page needs: open tabs, research list, recent chats."""
+        rs = sorted(self.research.values(), key=lambda r: -r.created_at)
+        cs = sorted(self.chats.values(), key=lambda c: -(c.messages[-1].at if c.messages else c.created_at))
+        return {"tabs": [{"id": t, "title": self.research[t].title} for t in self.tabs],
+                "researches": [{"id": r.id, "title": r.title, "question": r.question, "created_at": r.created_at,
+                                "open": r.id in self.tabs, **self.research_counts(r.id)} for r in rs],
+                "chats": [{"id": c.id, "title": c.title, "created_at": c.created_at, "busy": bool(self.busy.get(c.id))} for c in cs[:30]],
+                "can_run": self.can_run}
 
-    def totals(self) -> dict:
-        recs: list = [*self.projects.values(), *self.gaps.values(), *self.reviews.values(), *self.figures.values()]
-        return {"papers": sum(len(g.papers) for g in self.gaps.values()), "gaps": sum(len(g.gaps) for g in self.gaps.values()),
-                "citations": sum(len(v) for p in self.projects.values() for v in p.chosen.values()),
-                "figures": len(self.figures), "reviews": len(self.reviews),
-                "tokens_k": round(sum(r.tokens_used for r in recs) / 1000)}
+    def chat_view(self, c: Chat) -> dict:
+        studies = {m.study_id: record_view(self.gaps[m.study_id], self.busy.get(m.study_id))
+                   for m in c.messages if m.study_id and m.study_id in self.gaps}
+        started = {r.study_id + ":" + (r.gap.title if r.gap else ""): r.id for r in self.research.values() if r.study_id}
+        return {**json.loads(c.model_dump_json()), "busy": bool(self.busy.get(c.id)), "studies": studies, "started": started}
 
 
 def project_view(p: Project, busy: str | None) -> dict:
@@ -166,18 +209,25 @@ def make_handler(desk: Desk, port: int):
         def _json(self, code: int, data) -> None:
             self._send(code, json.dumps(data).encode(), "application/json")
 
-        def _page(self, page: str, script: str, section: str, data: dict | None = None) -> None:
-            payload = {"page": page, "section": section, "counts": desk.counts(), "can_run": desk.can_run, **(data or {})}
+        def _page(self, page: str, script: str, data: dict | None = None, research: Research | None = None, tool: str = "") -> None:
+            if research:
+                desk.open_tab(research.id)
+            payload = {"page": page, **desk.shell(), "tool": tool, **(data or {})}
+            if research:
+                payload["research"] = {**record_view(research, None), **desk.research_counts(research.id)}
             blob = json.dumps(payload).replace("</", "<\\/")
-            html = shell.replace("/*__APP_DATA__*/null", blob).replace("__PAGE__", script)
-            self._send(200, html.encode(), "text/html; charset=utf-8")
+            self._send(200, shell.replace("/*__APP_DATA__*/null", blob).replace("__PAGE__", script).encode(), "text/html; charset=utf-8")
 
         def _file(self, data: bytes, ctype: str, name: str) -> None:
             ascii_name = re.sub(r"[^\w.\- ]+", "", name) or "download"
             self._send(200, data, ctype, {"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"})
 
         def _get(self, store: dict, rid: str):
-            return store.get(rid) if ID.match(rid) else None
+            return store.get(rid) if ID.match(rid or "") else None
+
+        def _owned(self, store: dict, rid: str, research: Research):
+            r = self._get(store, rid)
+            return r if r is not None and r.research_id == research.id else None
 
         # ================================================================ GET
         def do_GET(self) -> None:
@@ -185,47 +235,52 @@ def make_handler(desk: Desk, port: int):
                 return self._json(403, {"error": "bad host"})
             u = urlparse(self.path)
             path, qs = u.path.rstrip("/") or "/", parse_qs(u.query)
-            m = re.fullmatch(r"/static/([\w.]+)", path)
-            if m and m.group(1) in STATIC:
+            if (m := re.fullmatch(r"/static/([\w.]+)", path)) and m.group(1) in STATIC:
                 return self._send(200, web.joinpath(m.group(1)).read_bytes(), STATIC[m.group(1)] + "; charset=utf-8")
             if path == "/":
-                return self._page("dashboard", "dashboard", "home", {"recent": desk.recent(), "totals": desk.totals()})
-            if path == "/gap":
-                gaps = sorted(desk.gaps.values(), key=lambda g: -g.created_at)
-                return self._page("gaps", "gap", "gap", {"studies": [
-                    {"id": g.id, "idea": g.idea, "status": g.status, "progress": g.progress, "created_at": g.created_at,
-                     "gaps": len(g.gaps), "papers": len(g.papers)} for g in gaps]})
-            if (m := re.fullmatch(r"/gap/([^/]+)", path)) and (g := self._get(desk.gaps, m.group(1))):
-                with desk.lock(g.id):
-                    return self._page("gap", "gap", "gap", {"study": record_view(g, desk.busy.get(g.id))})
-            if path == "/plan":
-                (desk.root / ".plan_visited").touch()
-                return self._page("plan", "plan", "plan", {"templates": [t.model_dump() for t in templates.TEMPLATES],
-                                                            "question": (qs.get("q") or [""])[0][:600]})
-            if path == "/figures":
-                figs = sorted(desk.figures.values(), key=lambda f: -f.created_at)
-                return self._page("figures", "figures", "figures", {"figures": [
-                    {"id": f.id, "title": f.title, "status": f.status, "created_at": f.created_at, "chart": f.spec.chart} for f in figs]})
-            if (m := re.fullmatch(r"/figures/([^/]+)", path)) and (f := self._get(desk.figures, m.group(1))):
-                return self._page("figure", "figures", "figures", {"figure": record_view(f, None)})
-            if path == "/cite":
-                ps = sorted(desk.projects.values(), key=lambda p: -p.created_at)
-                return self._page("cite", "cite", "cite", {"drafts": [project_summary(p, desk.busy.get(p.id)) for p in ps]})
-            if (m := re.fullmatch(r"/d/([^/]+)", path)) and (p := self._get(desk.projects, m.group(1))):
-                with desk.lock(p.id):
-                    return self._page("editor", "cite", "cite", {"project": project_view(p, desk.busy.get(p.id))})
-            if path == "/review":
-                rs = sorted(desk.reviews.values(), key=lambda r: -r.created_at)
-                return self._page("reviews", "review", "review", {"reviews": [
-                    {"id": r.id, "title": r.draft.title or r.filename, "status": r.status, "progress": r.progress,
-                     "created_at": r.created_at, "recommendation": r.review.recommendation if r.review else ""} for r in rs]})
-            if (m := re.fullmatch(r"/review/([^/]+)", path)) and (r := self._get(desk.reviews, m.group(1))):
-                with desk.lock(r.id):
-                    return self._page("review", "review", "review", {"review": record_view(r, desk.busy.get(r.id))})
+                return self._page("chat", "chat", {"chat": None})
+            if (m := re.fullmatch(r"/chat/([^/]+)", path)) and (c := self._get(desk.chats, m.group(1))):
+                with desk.lock(c.id):
+                    return self._page("chat", "chat", {"chat": desk.chat_view(c)})
+            if m := re.fullmatch(r"/r/([^/]+)(?:/(.*))?", path):
+                res = self._get(desk.research, m.group(1))
+                if res:
+                    return self._research_page(res, m.group(2) or "")
+            if path.startswith("/api/"):
+                return self._api_get(path, qs)
+            return self._json(404, {"error": "not found"})
 
-            # ---------------------------------------------------------------- API reads
-            if path == "/api/drafts":
-                return self._json(200, {"drafts": [project_summary(p, desk.busy.get(p.id)) for p in desk.projects.values()]})
+        def _research_page(self, res: Research, rest: str) -> None:
+            mine = lambda store: sorted((x for x in store.values() if x.research_id == res.id), key=lambda x: -x.created_at)  # noqa: E731
+            if rest in ("", "overview"):
+                return self._page("research", "research", {}, res, "overview")
+            if rest == "plan":
+                return self._page("plan", "plan", {"templates": [t.model_dump() for t in templates.TEMPLATES]}, res, "plan")
+            if rest == "figures":
+                return self._page("figures", "figures", {"figures": [{"id": f.id, "title": f.title, "status": f.status,
+                                  "created_at": f.created_at, "chart": f.spec.chart} for f in mine(desk.figures)]}, res, "figures")
+            if (m := re.fullmatch(r"figures/([^/]+)", rest)) and (f := self._owned(desk.figures, m.group(1), res)):
+                return self._page("figure", "figures", {"figure": record_view(f, None)}, res, "figures")
+            if rest == "cite":
+                return self._page("cite", "cite", {"drafts": [project_summary(p, desk.busy.get(p.id)) for p in mine(desk.projects)]}, res, "cite")
+            if (m := re.fullmatch(r"d/([^/]+)", rest)) and (p := self._owned(desk.projects, m.group(1), res)):
+                with desk.lock(p.id):
+                    return self._page("editor", "cite", {"project": project_view(p, desk.busy.get(p.id))}, res, "cite")
+            if rest == "review":
+                return self._page("reviews", "review", {"reviews": [{"id": r.id, "title": r.draft.title or r.filename, "status": r.status,
+                                  "progress": r.progress, "created_at": r.created_at,
+                                  "recommendation": r.review.recommendation if r.review else ""} for r in mine(desk.reviews)]}, res, "review")
+            if (m := re.fullmatch(r"review/([^/]+)", rest)) and (r := self._owned(desk.reviews, m.group(1), res)):
+                with desk.lock(r.id):
+                    return self._page("review", "review", {"review": record_view(r, desk.busy.get(r.id))}, res, "review")
+            return self._json(404, {"error": "not found"})
+
+        def _api_get(self, path: str, qs: dict) -> None:
+            if (m := re.fullmatch(r"/api/chat/([^/]+)", path)) and (c := self._get(desk.chats, m.group(1))):
+                with desk.lock(c.id):
+                    return self._json(200, desk.chat_view(c))
+            if path == "/api/shell":
+                return self._json(200, desk.shell())
             if (m := re.fullmatch(r"/api/d/([^/]+)", path)) and (p := self._get(desk.projects, m.group(1))):
                 with desk.lock(p.id):
                     return self._json(200, project_view(p, desk.busy.get(p.id)))
@@ -235,7 +290,7 @@ def make_handler(desk: Desk, port: int):
                     if m.group(2) == "txt":
                         return self._file(cite.to_text(p).encode(), "text/plain; charset=utf-8", f"{stem} (cited).txt")
                     return self._file(cite.to_docx(p), DOCX, f"{stem} (cited).docx")
-            for name, store in (("gap", desk.gaps), ("review", desk.reviews), ("figures", desk.figures)):
+            for name, store in (("gap", desk.gaps), ("review", desk.reviews), ("figures", desk.figures), ("r", desk.research)):
                 if (m := re.fullmatch(rf"/api/{name}/([^/]+)", path)) and (r := self._get(store, m.group(1))):
                     with desk.lock(r.id):
                         return self._json(200, record_view(r, desk.busy.get(r.id)))
@@ -266,10 +321,13 @@ def make_handler(desk: Desk, port: int):
             if path in ("/api/upload", "/api/review/upload"):  # raw file body
                 if desk.can_run:
                     return self._json(409, {"error": desk.can_run})
+                res = self._get(desk.research, self.headers.get("X-Research", ""))
+                if not res:
+                    return self._json(400, {"error": "open a research project first"})
                 name = unquote(self.headers.get("X-Filename", "draft")).replace("/", "_").replace("\\", "_")[:200]
                 if not DOC_EXT.search(name):
                     return self._json(400, {"error": "upload a PDF, a Word file (.docx), or plain text (.txt, .md)"})
-                return self._json(201, {"id": self._start(path, name, body)})
+                return self._json(201, {"id": self._start(path, name, body, res)})
 
             if not self.headers.get("Content-Type", "").startswith("application/json"):
                 return self._json(403, {"error": "JSON only"})
@@ -280,31 +338,39 @@ def make_handler(desk: Desk, port: int):
             if not isinstance(data, dict):
                 return self._json(400, {"error": "expected an object"})
 
+            if path == "/api/chat":
+                return self._chat(data)
+            if path == "/api/research":
+                return self._start_research(data)
+            if path == "/api/tabs/close":
+                rid = str(data.get("id", ""))
+                desk.tabs = [t for t in desk.tabs if t != rid]
+                desk.save_tabs()
+                return self._json(200, desk.shell())
+            if (m := re.fullmatch(r"/api/r/([^/]+)", path)) and (res := self._get(desk.research, m.group(1))):
+                with desk.lock(res.id):
+                    if "title" in data:
+                        res.title = str(data["title"]).strip()[:160] or res.title
+                    if "question" in data:
+                        res.question = str(data["question"]).strip()[:800]
+                    if data.get("template") in templates.BY_KEY:
+                        res.template = data["template"]
+                    res.save(desk.root)
+                    return self._json(200, {**record_view(res, None), **desk.research_counts(res.id)})
+
             if path in ("/api/paste", "/api/review/paste"):
                 if desk.can_run:
                     return self._json(409, {"error": desk.can_run})
+                res = self._get(desk.research, str(data.get("research_id", "")))
+                if not res:
+                    return self._json(400, {"error": "open a research project first"})
                 text = str(data.get("text", "")).strip()
                 if len(text) < 40:
                     return self._json(400, {"error": "paste at least a few sentences"})
                 if len(text) > MAX_TEXT:
                     return self._json(400, {"error": "that is very long; upload it as a file instead"})
                 title = re.sub(r"[^\w\-' ]+", "", str(data.get("title", "")))[:60].strip() or "Pasted draft"
-                return self._json(201, {"id": self._start(path.replace("paste", "upload"), f"{title}.txt", text.encode())})
-
-            if path == "/api/gap":
-                if desk.can_run:
-                    return self._json(409, {"error": desk.can_run})
-                idea = str(data.get("idea", "")).strip()
-                if len(idea) < 15:
-                    return self._json(400, {"error": "describe the idea in at least a sentence"})
-                if len(idea) > 4000:
-                    return self._json(400, {"error": "keep the idea under 4,000 characters"})
-                g = GapStudy(idea=idea, progress="Waiting to start")
-                with desk.lock(g.id):
-                    g.save(desk.root)
-                desk.gaps[g.id] = g
-                desk.enqueue("gap", g.id)
-                return self._json(201, {"id": g.id})
+                return self._json(201, {"id": self._start(path.replace("paste", "upload"), f"{title}.txt", text.encode(), res)})
 
             if path == "/api/figures":
                 return self._save_figure(data)
@@ -324,15 +390,62 @@ def make_handler(desk: Desk, port: int):
                 return self._json(404, {"error": "not found"})
             return self._project_action(p, m.group(2), data)
 
-        def _start(self, path: str, name: str, data: bytes) -> str:
+        # ---------------------------------------------------------------- actions
+        def _chat(self, data: dict) -> None:
+            if desk.can_run:
+                return self._json(409, {"error": desk.can_run})
+            text = str(data.get("text", "")).strip()
+            if not text:
+                return self._json(400, {"error": "type a message"})
+            if len(text) > MAX_CHAT:
+                return self._json(400, {"error": f"keep messages under {MAX_CHAT:,} characters"})
+            cid = str(data.get("chat_id", ""))
+            c = self._get(desk.chats, cid) if cid else None
+            if cid and not c:
+                return self._json(404, {"error": "not found"})
+            if c and desk.busy.get(c.id):
+                return self._json(409, {"error": "still thinking about your last message"})
+            c = c or Chat()
+            with desk.lock(c.id):
+                c.messages.append(ChatMessage(role="user", text=text))
+                c.status = "queued"
+                c.save(desk.root)
+            desk.chats[c.id] = c
+            desk.enqueue("chat", c.id, desk.gaps)
+            return self._json(200, desk.chat_view(c))
+
+        def _start_research(self, data: dict) -> None:
+            study = self._get(desk.gaps, str(data.get("study_id", "")))
+            try:
+                i = int(data.get("gap", -1))
+            except (TypeError, ValueError):
+                i = -1
+            if not study or not 0 <= i < len(study.gaps):
+                return self._json(400, {"error": "pick a gap from a finished search"})
+            gap = study.gaps[i]
+            existing = next((r for r in desk.research.values() if r.study_id == study.id and r.gap and r.gap.title == gap.title), None)
+            if existing:
+                desk.open_tab(existing.id)
+                return self._json(200, {"id": existing.id})
+            keep = set(gap.evidence_ids) | set(gap.addressing_ids)
+            res = Research(title=gap.title[:160], question=gap.question, gap=gap, study_id=study.id,
+                           chat_id=str(data.get("chat_id", ""))[:40],
+                           papers={k: v for k, v in study.papers.items() if k in keep})
+            with desk.lock(res.id):
+                res.save(desk.root)
+            desk.research[res.id] = res
+            desk.open_tab(res.id)
+            return self._json(201, {"id": res.id})
+
+        def _start(self, path: str, name: str, data: bytes, res: Research) -> str:
             if path == "/api/review/upload":
-                r = Review(filename=name, progress="Waiting for the reader")
+                r = Review(filename=name, progress="Waiting for the reader", research_id=res.id)
                 with desk.lock(r.id):
                     r.save(desk.root)
                 desk.reviews[r.id] = r
                 desk.enqueue("review", r.id, data)
                 return r.id
-            p = Project(filename=name or "draft.txt", progress="Waiting for the reader")
+            p = Project(filename=name or "draft.txt", progress="Waiting for the reader", research_id=res.id)
             with desk.lock(p.id):
                 p.save(desk.root)
             desk.projects[p.id] = p
@@ -351,7 +464,11 @@ def make_handler(desk: Desk, port: int):
             f = self._get(desk.figures, fid) if fid else None
             if fid and not f:
                 return self._json(404, {"error": "not found"})
-            f = f or Figure()
+            if not f:
+                res = self._get(desk.research, str(data.get("research_id", "")))
+                if not res:
+                    return self._json(400, {"error": "open a research project first"})
+                f = Figure(research_id=res.id)
             with desk.lock(f.id):
                 f.title = str(data.get("title", "") or "Untitled figure")[:160]
                 f.csv, f.spec = csv_text, spec
@@ -391,7 +508,7 @@ def make_handler(desk: Desk, port: int):
 
 
 def make_jobs(llm) -> dict[str, Callable]:
-    from paperrepro import gapfinder, reviewing
+    from paperrepro import chatting, gapfinder, reviewing
     from paperrepro.agents import caption_writer
     from paperrepro.pipeline import find_for_sentence, process
     from paperrepro.trace import Tracer
@@ -406,6 +523,8 @@ def make_jobs(llm) -> dict[str, Callable]:
         "find": lambda p, sid, root, lock: find_for_sentence(p, sid, llm, root, lock=lock),
         "gap": lambda g, _a, root, lock: gapfinder.run(g, llm, root, lock=lock),
         "review": lambda r, data, root, lock: reviewing.run(r, data, llm, root, lock=lock),
+        "chat": lambda c, studies, root, lock: chatting.turn(c, llm, root, studies,
+                                                             lambda s: gapfinder.run(s, llm, root), lock=lock),
         "caption": caption,
     }
 
