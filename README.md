@@ -2,11 +2,11 @@
 
 **A research workbench: from a rough idea to a paper you can stand behind.**
 
-Five stages, in the order research actually happens:
+Open the app and you're in a **chat** with the Research Guide. Describe what you want to study; it asks what it needs, searches the published literature, and shows the gaps worth filling as cards in the conversation. Press **Start research** on one and it opens as a **project tab**, like a browser tab. Work on several at once; each tab has its own tools, holding only that project's work:
 
 | Stage | What you do | AI helpers |
 |---|---|---|
-| 1 **Find a gap** | Describe an idea. Get sharp research questions, a map of the literature, and open gaps, each backed by real papers and re-checked for novelty. | Idea Framer, Gap Analyst, Novelty Checker |
+| 1 **Gap & question** | Found in the chat: sharp research questions, a map of the literature, open gaps backed by real papers and re-checked for novelty. The tab keeps the gap, its evidence and your question. | Research Guide, Idea Framer, Gap Analyst, Novelty Checker |
 | 2 **Plan** | Pick a template (research article, conference paper, review, short communication, thesis chapter); follow a section-by-section guide; download a filled outline. | none (deterministic) |
 | 3 **Figures** | Paste data; get line, bar, scatter or error-bar charts at real journal sizes, colourblind-safe or grayscale; export SVG or 300 dpi PNG. | Caption Writer (optional) |
 | 4 **Cite** | Upload your draft; see which published papers back each sentence; tick to cite in Numbered, IEEE or APA; export Word or text. | OCR, Claim Finder, Source Judge |

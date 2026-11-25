@@ -86,14 +86,21 @@
       PR.icon(av, PR.ICONS.gap);
       var body = el("div", {}, a);
       if (m.study_id) study(body, C.studies[m.study_id]);
-      else el("div", { class: "tx" }, body, m.text);
+      else prose(el("div", { class: "tx" }, body), m.text);
     });
-    if (C.busy || C.status === "queued" || (C.status === "working" && !Object.keys(C.studies).some(function (k) { return PR.WORKING[C.studies[k].status]; }))) {
+    var searching = Object.keys(C.studies || {}).some(function (k) { return PR.WORKING[C.studies[k].status]; });
+    if ((C.busy || C.status === "queued" || C.status === "working") && !searching) {  // the search card shows its own progress
       var a = el("div", { class: "msg-a" }, thread), av = el("div", { class: "av" }, a); PR.icon(av, PR.ICONS.gap);
       var t = el("div", { class: "typing", "aria-label": "thinking" }, a); el("i", {}, t); el("i", {}, t); el("i", {}, t);
     }
     if (send) send.disabled = busy() || !!PR.D.can_run;
     if (atBottom || sending) window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function prose(node, text) {  // **bold** only; everything else stays plain text
+    String(text || "").split(/\*\*([^*]+)\*\*/).forEach(function (part, i) {
+      if (i % 2) el("b", {}, node, part); else node.appendChild(document.createTextNode(part));
+    });
   }
 
   function study(parent, S) {

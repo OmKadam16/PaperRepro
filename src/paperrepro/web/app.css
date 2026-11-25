@@ -33,17 +33,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 
 /* ================================================================ shell: browser-like tabs */
-:root { --tabbar-h: 48px; --toolnav-h: 58px; }
+:root { --tabbar-h: 48px; --toolnav-h: 58px; --chrome: #1d1b17; --chrome-fg: #f3eee2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --chrome: #08090c; --chrome-fg: #e9e4d8; } }
+:root[data-theme="dark"] { --chrome: #08090c; --chrome-fg: #e9e4d8; }
 .frame { min-height: 100vh; display: flex; flex-direction: column; }
-.tabbar { position: sticky; top: 0; z-index: 60; height: var(--tabbar-h); display: flex; align-items: flex-end; gap: 2px; padding: 0 10px 0 12px; background: var(--ink); color: var(--paper); overflow-x: auto; scrollbar-width: none; }
+.tabbar { position: sticky; top: 0; z-index: 60; height: var(--tabbar-h); display: flex; align-items: flex-end; gap: 2px; padding: 0 10px 0 12px; background: var(--chrome); color: var(--chrome-fg); overflow-x: auto; scrollbar-width: none; }
 .tabbar::-webkit-scrollbar { display: none; }
-.tb-brand { display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px; height: 100%; text-decoration: none; color: var(--paper); flex: none; }
+.tb-brand { display: flex; align-items: center; gap: 8px; padding: 0 14px 0 4px; height: 100%; text-decoration: none; color: var(--chrome-fg); flex: none; }
 .tb-brand svg { width: 24px; height: 24px; }
 .tb-brand b { font-family: var(--display); font-style: italic; font-weight: 450; font-size: 18px; }
-.tab { position: relative; flex: 0 1 220px; min-width: 120px; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-radius: 10px 10px 0 0; text-decoration: none; color: rgba(255,255,255,.72); font-family: var(--ui); font-size: 13px; }
-:root[data-theme="dark"] .tab, :root:not([data-theme="light"]) .tab { color: inherit; }
-.tab:hover { background: rgba(255,255,255,.08); color: #fff; }
-.tab[aria-current="page"] { background: var(--desk); color: var(--ink); }
+.tab { position: relative; flex: 0 1 220px; min-width: 120px; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-radius: 10px 10px 0 0; text-decoration: none; color: var(--chrome-fg); opacity: .78; font-family: var(--ui); font-size: 13px; }
+.tab:hover { background: rgba(255,255,255,.08); color: var(--chrome-fg); }
+.tab[aria-current="page"] { background: var(--desk); color: var(--ink); opacity: 1; }
+.tab:hover { opacity: 1; }
 .tab[aria-current="page"]::before, .tab[aria-current="page"]::after { content: ""; position: absolute; bottom: 0; width: 10px; height: 10px; }
 .tab[aria-current="page"]::before { left: -10px; background: radial-gradient(circle at 0 0, transparent 9.5px, var(--desk) 10px); }
 .tab[aria-current="page"]::after { right: -10px; background: radial-gradient(circle at 100% 0, transparent 9.5px, var(--desk) 10px); }
@@ -53,10 +55,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tab .dot svg { width: 16px; height: 16px; }
 .tab .x { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: inherit; cursor: pointer; display: grid; place-items: center; font-size: 13px; opacity: .6; }
 .tab .x:hover { background: rgba(127,127,127,.25); opacity: 1; }
-.tb-new { flex: none; width: 32px; height: 32px; margin: 0 0 3px 4px; border-radius: 8px; border: 0; background: none; color: rgba(255,255,255,.8); font-size: 20px; cursor: pointer; text-decoration: none; display: grid; place-items: center; }
+.tb-new { flex: none; width: 32px; height: 32px; margin: 0 0 3px 4px; border-radius: 8px; border: 0; background: none; color: var(--chrome-fg); font-size: 20px; cursor: pointer; text-decoration: none; display: grid; place-items: center; }
 .tb-new:hover { background: rgba(255,255,255,.1); color: #fff; }
 .tb-right { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 100%; padding-left: 12px; flex: none; }
-.tb-right .ghost { color: rgba(255,255,255,.75); border-color: rgba(255,255,255,.25); }
+.tb-right .ghost { color: var(--chrome-fg); border-color: rgba(255,255,255,.25); opacity: .8; }
 .body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); }
 .body.with-side { grid-template-columns: 272px minmax(0, 1fr); }
 .side { position: sticky; top: var(--tabbar-h); height: calc(100vh - var(--tabbar-h)); overflow-y: auto; border-right: 1px solid var(--rule-2); padding: 18px 14px; display: flex; flex-direction: column; gap: 4px; }

@@ -3,6 +3,9 @@
 ## Goal
 A research workbench that follows the research process: find a gap (stage 1), plan the paper (2), make figures (3), cite sources (4), review the draft (5). Never invent a source.
 
+## Chat and research tabs
+`/` is a chat with the Research Guide (`agents/research_guide.*`, `chatting.py`). Each turn the guide either replies or runs a gap study (`gapfinder.py`), whose cards appear in the conversation; afterwards it comments on the results. "Start research" turns one gap into a `Research` record (title, question, the gap, its evidence papers) that opens as a tab; open tabs persist in `projects/tabs.json`. Every draft, figure and review carries `research_id`, and the tools under `/r/<id>/…` only see their own project's records. Older records are adopted into an "Earlier work" project on start.
+
 ## Stages and modules
 | Stage | Pipeline | Helpers (`agents/*.md` + `agents/*.py`) | Deterministic parts |
 |---|---|---|---|
