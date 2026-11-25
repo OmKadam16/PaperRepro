@@ -1,5 +1,5 @@
 /* Project assistant: a text-only chat on the right of every research tab.
-   Replies come from the server (Nemotron 3 Ultra, GLM-4.7-Flash as backup); no key ever reaches this page.
+   Replies come from the server; no key and no model name ever reaches this page.
    Everything is rendered with textContent. */
 (function () {
   "use strict";
@@ -17,7 +17,7 @@
     var head = el("div", { class: "p-head" }, side);
     var hl = el("div", {}, head);
     el("b", {}, hl, "Project assistant");
-    var model = el("span", { class: "p-model" }, hl, "Nemotron 3 Ultra · GLM-4.7-Flash backup");
+    el("span", { class: "p-model" }, hl, "Research help for this project");
     var close = el("button", { class: "ghost p-close", type: "button", "aria-label": "Hide the project assistant" }, head, "→");
 
     var thread = el("div", { class: "p-thread", "aria-live": "polite" }, side);
@@ -65,7 +65,7 @@
       sending = true; send.disabled = true;
       msgs.push({ role: "user", text: text }); ta.value = ""; draw();
       PR.api("/api/r/" + R.id + "/chat", { text: text }).then(function (x) {
-        msgs = x.messages; if (x.model) model.textContent = "Answered by " + x.model;
+        msgs = x.messages;
         PR.setQuota(x.quota);
       }).catch(function (e) {
         msgs.pop(); ta.value = text; PR.toast(e.message);
@@ -78,7 +78,7 @@
     if (PR.D.quota) PR.onQuota(PR.D.quota);
     PR.get("/api/r/" + R.id + "/chat").then(function (x) {
       msgs = x.messages || [];
-      if (!(x.models || []).length) { ta.disabled = send.disabled = true; ta.placeholder = "The project chat isn't set up on the server yet."; }
+      if (!x.ready) { ta.disabled = send.disabled = true; ta.placeholder = "The project chat isn't set up on the server yet."; }
       draw();
     });
     draw();

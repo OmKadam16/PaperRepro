@@ -509,14 +509,14 @@ def make_handler(desk: Desk, port: int):
         def _panel_view(self, res: Research) -> dict:
             c = next((c for c in desk.chats.values() if c.research_id == res.id), None)
             return {"messages": [m.model_dump() for m in c.messages] if c else [], "busy": bool(c and desk.busy.get(c.id)),
-                    "models": chatmodels.available(), "quota": self._quota()}
+                    "ready": bool(chatmodels.available()), "quota": self._quota()}
 
         def _panel(self, res: Research, data: dict) -> None:
             text = str(data.get("text", "")).strip()
             if not text:
                 return self._json(400, {"error": "type a message"})
             if not chatmodels.available():
-                return self._json(409, {"error": "The project chat isn't set up: add OPENROUTER_API_KEY or ZAI_API_KEY to .env and restart."})
+                return self._json(409, {"error": "The project chat isn't set up on the server yet."})
             with desk.guard:
                 c = desk.panel_chat(res.id)
                 if desk.busy.get(c.id):
@@ -528,7 +528,7 @@ def make_handler(desk: Desk, port: int):
                     with desk.lock(c.id):
                         c.messages += [ChatMessage(role="user", text=text[:MAX_CHAT]), ChatMessage(role="assistant", text=refusal)]
                         c.save(desk.root)
-                    return self._json(200, {**self._panel_view(res), "busy": False, "model": "", "refused": True})
+                    return self._json(200, {**self._panel_view(res), "busy": False, "refused": True})
                 if not self._spend():
                     return
                 history = [{"role": m.role, "content": m.text} for m in c.messages[-PANEL_HISTORY:] if m.text]
@@ -538,7 +538,7 @@ def make_handler(desk: Desk, port: int):
                 except chatmodels.ChatUnavailable as e:
                     desk.quota.refund(self.uid, self.ip)
                     tracer.event("project_assistant", error=str(e), seconds=round(time.time() - t0, 2))
-                    return self._json(503, {"error": "Both chat models are busy right now (this didn't use a call). Try again in a minute.",
+                    return self._json(503, {"error": "The assistant is busy right now (this didn't use a call). Try again in a minute.",
                                             "quota": self._quota()})
                 answer = guard.check_reply(reply.text)
                 tracer.event("project_assistant", model=reply.model, tried=reply.tried, tokens=reply.tokens,
@@ -547,7 +547,7 @@ def make_handler(desk: Desk, port: int):
                     c.messages += [ChatMessage(role="user", text=text), ChatMessage(role="assistant", text=answer)]
                     c.tokens_used += reply.tokens
                     c.save(desk.root)
-                return self._json(200, {**self._panel_view(res), "busy": False, "model": reply.model})
+                return self._json(200, {**self._panel_view(res), "busy": False})
             finally:
                 desk.busy.pop(c.id, None)
 

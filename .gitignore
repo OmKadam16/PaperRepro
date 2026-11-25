@@ -9,3 +9,16 @@ runs/
 .ruff_cache/
 *.egg-info/
 .DS_Store
+
+# tests stay local
+tests/
+# local tool and editor settings
+.claude/
+.vscode/
+.idea/
+# secrets and per-machine data (also covered by projects/* above)
+.env.*
+!.env.example
+usage.json
+.cookie_key
+*.log
