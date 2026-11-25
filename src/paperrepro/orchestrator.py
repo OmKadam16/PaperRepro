@@ -17,6 +17,8 @@ from paperrepro.llm import LLM
 from paperrepro.state import Route, RunState
 from paperrepro.trace import Tracer
 
+MAX_INSTALL_RETRIES = 2  # dependency-install reroutes allowed, outside max_iterations
+
 # Order of the forward pipeline. A route sends control back to an earlier step,
 # then execution continues forward from there.
 PIPELINE = ["ingest", "extract", "find_data", "code", "execute", "critic"]
@@ -41,6 +43,7 @@ def run_pipeline(state: RunState, llm: LLM, root: Path) -> RunState:
     tracer.event("orchestrator", start=state.url, dry_run=state.dry_run)
     step_i = 0
     iterations = 0
+    install_retries = 0
     try:
         while step_i < len(PIPELINE):
             reason = _over_budget(state)
@@ -61,8 +64,19 @@ def run_pipeline(state: RunState, llm: LLM, root: Path) -> RunState:
                 executor.run(state, tracer, root)
             elif step == "critic":
                 critic.run(state, llm, tracer, root)
-                iterations += 1
+                # A failed dependency install is mechanical: it gets its own small cap
+                # instead of eating the reasoning budget (run 2 lost 2 of 4 iterations to it).
+                install_failed = bool(state.exec_result and
+                                      state.exec_result.stderr_tail.startswith("[install]"))
+                if install_failed:
+                    install_retries += 1
+                else:
+                    iterations += 1
                 if state.route == Route.reporter:
+                    break
+                if install_retries > MAX_INSTALL_RETRIES:
+                    state.status = "budget_exhausted"
+                    tracer.event("orchestrator", stop="install retries")
                     break
                 if iterations >= state.budget.max_iterations:
                     state.status = "budget_exhausted"

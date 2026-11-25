@@ -17,7 +17,7 @@ def run(
     dry_run: bool = typer.Option(False, help="Synthetic agents, no API key; tests the plumbing"),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run output goes"),
     max_iterations: int = typer.Option(4, help="Max critic -> reroute cycles"),
-    provider: str = typer.Option(None, help="openai | anthropic (default: whichever key is set)"),
+    provider: str | None = typer.Option(None, help="openai | anthropic (default: whichever key is set)"),
 ) -> None:
     if dry_run:
         from paperrepro.dryrun import DryRunLLM

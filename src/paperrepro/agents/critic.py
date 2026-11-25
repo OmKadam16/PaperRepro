@@ -106,8 +106,13 @@ def run(state: RunState, llm: LLM, tracer: Tracer, root: Path | None = None) -> 
     if ws and ws.exists():
         prompt += f"\nWORKSPACE CODE:\n{_workspace_code(ws)}\n"
     diag, usage = llm.structured(agent="critic", system=spec("critic"), prompt=prompt, schema=Diagnosis)
-    state.route, state.critic_feedback = diag.route, diag.explanation
     state.tokens_used += usage.total
+    route, rule = diag.route, None
+    if route == Route.methods_extractor and Route.methods_extractor in state.route_history:
+        # the paper was already re-read once; a second read has never changed the outcome
+        route, rule = Route.reporter, "spec_reread_once"
+    state.route, state.critic_feedback = route, diag.explanation
     for v in open_:
         v.diagnosis = diag.explanation
-    tracer.event("critic", route=diag.route.value, explanation=diag.explanation, tokens=usage.total)
+    tracer.event("critic", route=route.value, llm_route=diag.route.value, rule=rule,
+                 explanation=diag.explanation, tokens=usage.total)

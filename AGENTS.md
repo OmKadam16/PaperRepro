@@ -5,7 +5,7 @@ PaperRepro: multi-agent system that reproduces paper results. Python 3.10+.
 ## Setup
 ```
 uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
+uv pip install -e ".[dev,pdf,openai]"
 pytest -q
 ```
 
