@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperrepro"
-version = "0.1.0"
-description = "Multi-agent system that reproduces a paper's results"
+version = "0.2.0"
+description = "Find the published sources behind every claim in your draft"
 requires-python = ">=3.10"
 dependencies = [
   "pydantic>=2.5",

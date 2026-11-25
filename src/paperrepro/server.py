@@ -1,12 +1,11 @@
-"""Local web app: `paperrepro serve` -> http://127.0.0.1:8765
+"""PaperRepro web app: `paperrepro serve` -> http://127.0.0.1:8765
 
-People paste a paper link (or search arXiv by title), say what they want checked, and
-watch the agents work live. Runs execute one at a time in a background worker.
+Upload a draft, watch it being read and searched, then tick sources sentence by sentence;
+citations and the reference list are written for you. One draft is processed at a time.
 
-Safety: this server runs LLM-written code on this machine and spends the configured API
-key, so it binds to 127.0.0.1 only, checks Host/Origin (blocks DNS rebinding and other
-sites posting to it), requires a custom header on writes (blocks cross-site form posts),
-and validates every input. Do not expose it to a network until the sandbox is Docker.
+Safety: binds 127.0.0.1 only, checks Host and Origin, requires a custom header on every
+write (blocks cross-site posts), validates ids, sizes and styles. Uploads go to OpenAI for
+reading and judging; only short keyword queries go to the scholarly databases.
 """
 from __future__ import annotations
 
@@ -14,135 +13,118 @@ import json
 import queue
 import re
 import threading
-import time
 import traceback
-import xml.etree.ElementTree as ET
-from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 from typing import Callable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import quote, unquote, urlparse
 
-import httpx
+from paperrepro import cite
+from paperrepro.state import Project
+from paperrepro.tools.reader import MAX_BYTES
 
-from paperrepro import site
-from paperrepro.state import RunState
-
-RUN_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
-MAX_BODY = 10_000
-MAX_REQUEST = 2_000
-ARXIV_API = "https://export.arxiv.org/api/query"
-ATOM = "{http://www.w3.org/2005/Atom}"
+PID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
+SID = re.compile(r"^p\d+s\d+$")
+MAX_TEXT = 400_000
+STYLES = ("numbered", "ieee", "apa")
 
 
-@dataclass
-class Job:
-    id: str
-    url: str
-    request: str
-    status: str = "queued"  # queued | running | finished | failed
-    created: float = field(default_factory=time.time)
-    error: str = ""
+class Desk:
+    """Projects in memory (the source of truth while the server runs) plus a job worker."""
 
-
-class Lab:
-    """Job queue + single worker. `runner(state)` runs the pipeline for one RunState."""
-
-    def __init__(self, root: Path, runner: Callable[[RunState], None], dry_run: bool,
-                 can_run: str = ""):
-        self.root, self.runner, self.dry_run = root, runner, dry_run
-        self.can_run = can_run  # empty = OK, else the reason runs cannot start
-        self.jobs: dict[str, Job] = {}
-        self.q: queue.Queue[str] = queue.Queue()
-        self.lock = threading.Lock()
+    def __init__(self, root: Path, process: Callable, find: Callable, can_run: str = ""):
+        self.root, self.process, self.find, self.can_run = root, process, find, can_run
+        self.projects: dict[str, Project] = {}
+        self.locks: dict[str, threading.RLock] = {}
+        self.busy: dict[str, str] = {}  # project id -> what the worker is doing for it
+        self.q: queue.Queue = queue.Queue()
+        self.guard = threading.Lock()
+        root.mkdir(parents=True, exist_ok=True)
+        for f in sorted(root.glob("*/project.json")):
+            try:
+                p = Project.load(f)
+            except Exception:
+                continue
+            if p.status not in ("ready", "error"):  # the server stopped mid-way last time
+                p.status = "error"
+                p.error = "Interrupted: the server stopped while this draft was being processed. Upload it again."
+            self.projects[p.id] = p
         threading.Thread(target=self._work, daemon=True).start()
 
-    def submit(self, url: str, request: str) -> Job:
-        state = RunState(url=url, user_request=request, dry_run=self.dry_run)
-        state.save(self.root)  # visible in the lab immediately
-        job = Job(id=state.run_id, url=url, request=request)
-        with self.lock:
-            self.jobs[job.id] = job
-        self.q.put(job.id)
-        return job
+    def lock(self, pid: str) -> threading.RLock:
+        with self.guard:
+            return self.locks.setdefault(pid, threading.RLock())
 
-    def position(self, job_id: str) -> int:
-        with self.lock:
-            waiting = sorted((j for j in self.jobs.values() if j.status == "queued"), key=lambda j: j.created)
-        return next((i for i, j in enumerate(waiting) if j.id == job_id), -1)
+    def submit(self, filename: str, data: bytes) -> Project:
+        p = Project(filename=filename[:200] or "draft.txt", progress="Waiting for the reader")
+        with self.lock(p.id):
+            p.save(self.root)
+        self.projects[p.id] = p
+        self.busy[p.id] = "process"
+        self.q.put(("process", p.id, data))
+        return p
+
+    def find_more(self, pid: str, sid: str) -> None:
+        self.busy[pid] = f"find:{sid}"
+        self.q.put(("find", pid, sid))
 
     def _work(self) -> None:
         while True:
-            job_id = self.q.get()
-            job = self.jobs[job_id]
-            job.status = "running"
+            kind, pid, arg = self.q.get()
+            p = self.projects[pid]
             try:
-                state = RunState.load(self.root / job_id / "state.json")
-                state.started_at = time.time()  # waiting in line is not run time
-                self.runner(state)
-                job.status = "finished"
-            except Exception as e:  # the pipeline already records its own errors
-                job.status, job.error = "failed", repr(e)
+                if kind == "process":
+                    self.process(p, arg, self.root, self.lock(pid))
+                else:
+                    self.find(p, arg, self.root, self.lock(pid))
+            except Exception as e:
+                p.status, p.error = "error", f"{type(e).__name__}: {e}"
                 traceback.print_exc()
-            try:
-                site.build_site(self.root)  # keep the static copy current too
-            except Exception:
-                traceback.print_exc()
+            finally:
+                self.busy.pop(pid, None)
 
 
-# ---------------------------------------------------------------- arXiv search
-def search_arxiv(q: str, client: httpx.Client | None = None) -> list[dict]:
-    own = client is None
-    client = client or httpx.Client(timeout=30)
-    if m := re.fullmatch(r"(?:arxiv:)?\s*(\d{4}\.\d{4,5})(v\d+)?", q.strip(), re.I):
-        params = {"id_list": m.group(1), "max_results": 1}  # a bare arXiv id: exact lookup
-    else:
-        # every word must match (arXiv ORs bare words, which buries the paper you meant)
-        words = re.findall(r"[A-Za-z0-9]+", q)[:10]
-        params = {"search_query": " AND ".join(f"all:{w}" for w in words), "max_results": 8}
-    try:
-        r = client.get(ARXIV_API, params=params, headers={"User-Agent": "paperrepro/0.1"},
-                       follow_redirects=True)
-        r.raise_for_status()
-        root = ET.fromstring(r.content)
-    finally:
-        if own:
-            client.close()
-    out = []
-    for e in root.findall(f"{ATOM}entry"):
-        abs_url = (e.findtext(f"{ATOM}id") or "").strip()
-        m = re.search(r"arxiv\.org/abs/([^v\s]+)", abs_url)
-        if not m:
-            continue
-        out.append({
-            "id": m.group(1), "url": f"https://arxiv.org/abs/{m.group(1)}",
-            "title": re.sub(r"\s+", " ", e.findtext(f"{ATOM}title") or "").strip(),
-            "authors": [a.findtext(f"{ATOM}name") or "" for a in e.findall(f"{ATOM}author")][:4],
-            "year": (e.findtext(f"{ATOM}published") or "")[:4],
-        })
-    return out
+def view(p: Project, busy: str | None) -> dict:
+    """The project as the browser needs it, with citations already rendered by cite.py."""
+    nums = cite.numbering(p)
+    return {
+        **json.loads(p.model_dump_json()),
+        "busy": busy,
+        "numbers": nums,
+        "markers": {s.id: cite.marker(p, s.id, p.style, nums)
+                    for pr in p.draft.paragraphs for s in pr.sentences if p.chosen.get(s.id)},
+        "references": cite.references(p, p.style),
+        "style_names": cite.STYLE_NAMES,
+    }
 
 
-# ---------------------------------------------------------------- HTTP
-def make_handler(lab: Lab, port: int, search: Callable[[str], list[dict]] = search_arxiv):
-    template = files("paperrepro").joinpath("site_template.html").read_text()
-    allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+def summary(p: Project, busy: str | None) -> dict:
+    return {"id": p.id, "filename": p.filename, "title": p.draft.title, "created_at": p.created_at,
+            "status": p.status, "progress": p.progress, "busy": bool(busy),
+            "claims": len(p.claims), "with_sources": len({m.sentence_id for m in p.matches}),
+            "cited": sum(1 for v in p.chosen.values() if v), "sources": len(cite.numbering(p))}
+
+
+def make_handler(desk: Desk, port: int):
+    template = files("paperrepro").joinpath("app_template.html").read_text()
+    hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "PaperRepro"
 
-        def log_message(self, fmt, *args):  # quieter console
+        def log_message(self, fmt, *args):
             pass
 
-        # -- helpers
-        def _send(self, code: int, body: bytes, ctype: str) -> None:
+        def _send(self, code: int, body: bytes, ctype: str, extra: dict | None = None) -> None:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Cache-Control", "no-store")
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
 
@@ -150,153 +132,142 @@ def make_handler(lab: Lab, port: int, search: Callable[[str], list[dict]] = sear
             self._send(code, json.dumps(data).encode(), "application/json")
 
         def _page(self, data: dict) -> None:
-            data = {**data, "live": True, "nav": self._nav()}
-            self._send(200, site._page(template, data).encode(), "text/html; charset=utf-8")
+            blob = json.dumps(data).replace("</", "<\\/")
+            self._send(200, template.replace("/*__APP_DATA__*/null", blob).encode(), "text/html; charset=utf-8")
 
-        def _nav(self) -> dict:
-            briefs = self._briefs()
-            return {"runs": [{"id": b["id"], "when": b["when"], "dry_run": b["dry_run"]} for b in briefs]}
+        def _project(self, pid: str) -> Project | None:
+            return desk.projects.get(pid) if PID.match(pid) else None
 
-        def _briefs(self) -> list[dict]:
-            runs = []
-            for d in site.list_runs(lab.root):
-                try:
-                    runs.append(self._overlay(site.load_run(d)))
-                except Exception:
-                    continue  # a run being written right now; next request will see it
-            runs.sort(key=lambda r: r["started"])
-            return [site._brief(r) for r in runs]
+        def _list(self) -> list[dict]:
+            ps = sorted(desk.projects.values(), key=lambda p: -p.created_at)
+            return [summary(p, desk.busy.get(p.id)) for p in ps]
 
-        def _overlay(self, r: dict) -> dict:
-            job = lab.jobs.get(r["id"])
-            if job and job.status in ("queued", "running"):
-                r["status"] = job.status
-                r["finished"] = False
-            return r
-
-        def _host_ok(self) -> bool:
-            return self.headers.get("Host", "") in allowed_hosts
-
-        # -- GET
+        # ---------------------------------------------------------------- GET
         def do_GET(self) -> None:
-            if not self._host_ok():
+            if self.headers.get("Host", "") not in hosts:
                 return self._json(403, {"error": "bad host"})
-            u = urlparse(self.path)
-            path, qs = u.path.rstrip("/") or "/", parse_qs(u.query)
-            try:
-                if path in ("/", "/new"):
-                    return self._page({"page": "new", "can_run": lab.can_run, "dry_run": lab.dry_run,
-                                       "jobs": self._jobs()})
-                if path == "/lab":
-                    return self._page({"page": "lab", "runs": self._briefs()})
-                if path == "/claims":
-                    runs = [site.load_run(d) for d in site.list_runs(lab.root)]
-                    claims = [{**v, "run": r["id"], "title": r["title"], "when": r["when"]}
-                              for r in runs if not r["dry_run"] and r["finished"] for v in r["verdicts"]]
-                    return self._page({"page": "claims", "claims": claims})
-                if path == "/crew":
-                    runs = [site.load_run(d) for d in site.list_runs(lab.root)]
-                    return self._page({"page": "crew", "crew": site.crew(runs)})
-                m = re.fullmatch(r"/run/([^/]+)", path)
-                if m and RUN_ID.match(m.group(1)) and (lab.root / m.group(1) / "state.json").exists():
-                    return self._page({"page": "run", **self._run_payload(m.group(1))})
-                m = re.fullmatch(r"/api/run/([^/]+)", path)
-                if m and RUN_ID.match(m.group(1)) and (lab.root / m.group(1) / "state.json").exists():
-                    return self._json(200, self._run_payload(m.group(1)))
-                m = re.fullmatch(r"/api/run/([^/]+)/report\.md", path)
-                if m and RUN_ID.match(m.group(1)) and (lab.root / m.group(1) / "report.md").exists():
-                    return self._send(200, (lab.root / m.group(1) / "report.md").read_bytes(),
-                                      "text/markdown; charset=utf-8")
-                if path == "/api/jobs":
-                    return self._json(200, {"jobs": self._jobs()})
-                if path == "/api/search":
-                    q = (qs.get("q") or [""])[0].strip()[:200]
-                    if len(q) < 3:
-                        return self._json(400, {"error": "type at least 3 characters"})
-                    try:
-                        return self._json(200, {"results": search(q)})
-                    except Exception as e:
-                        return self._json(502, {"error": f"arXiv search failed: {type(e).__name__}"})
-            except json.JSONDecodeError:
-                return self._json(503, {"error": "run is being written; retry"})
+            path = urlparse(self.path).path.rstrip("/") or "/"
+            if path == "/":
+                return self._page({"page": "home", "drafts": self._list(), "can_run": desk.can_run})
+            if path == "/api/drafts":
+                return self._json(200, {"drafts": self._list()})
+            m = re.fullmatch(r"/d/([^/]+)", path)
+            if m and (p := self._project(m.group(1))):
+                with desk.lock(p.id):
+                    return self._page({"page": "editor", "project": view(p, desk.busy.get(p.id))})
+            m = re.fullmatch(r"/api/d/([^/]+)", path)
+            if m and (p := self._project(m.group(1))):
+                with desk.lock(p.id):
+                    return self._json(200, view(p, desk.busy.get(p.id)))
+            m = re.fullmatch(r"/api/d/([^/]+)/export\.(txt|docx)", path)
+            if m and (p := self._project(m.group(1))):
+                with desk.lock(p.id):
+                    stem = re.sub(r"[^\w\- ]+", "", Path(p.filename).stem)[:60].strip() or "draft"
+                    name = f"{stem} (cited).{m.group(2)}"
+                    disp = {"Content-Disposition":
+                            f"attachment; filename=\"draft.{m.group(2)}\"; filename*=UTF-8''{quote(name)}"}
+                    if m.group(2) == "txt":
+                        return self._send(200, cite.to_text(p).encode(), "text/plain; charset=utf-8", disp)
+                    return self._send(200, cite.to_docx(p),
+                                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document", disp)
             return self._json(404, {"error": "not found"})
 
-        def _run_payload(self, run_id: str) -> dict:
-            r = self._overlay(site.load_run(lab.root / run_id))
-            ids = [x["id"] for x in self._briefs()]
-            i = ids.index(run_id) if run_id in ids else -1
-            job = lab.jobs.get(run_id)
-            return {"run": r, "job": asdict(job) if job else None,
-                    "position": lab.position(run_id) if job else -1,
-                    "prev": ids[i - 1] if i > 0 else None,
-                    "next": ids[i + 1] if 0 <= i < len(ids) - 1 else None}
-
-        def _jobs(self) -> list[dict]:
-            with lab.lock:
-                jobs = sorted(lab.jobs.values(), key=lambda j: -j.created)
-            return [asdict(j) for j in jobs[:20]]
-
-        # -- POST
+        # ---------------------------------------------------------------- POST
         def do_POST(self) -> None:
-            if not self._host_ok():
+            if self.headers.get("Host", "") not in hosts:
                 return self._json(403, {"error": "bad host"})
             origin = self.headers.get("Origin")
-            if origin and urlparse(origin).netloc not in allowed_hosts:
+            if origin and urlparse(origin).netloc not in hosts:
                 return self._json(403, {"error": "cross-origin request refused"})
-            if self.headers.get("X-PaperRepro") != "1" or \
-                    not self.headers.get("Content-Type", "").startswith("application/json"):
+            if self.headers.get("X-PaperRepro") != "1":
                 return self._json(403, {"error": "missing app header"})
-            if urlparse(self.path).path != "/api/runs":
-                return self._json(404, {"error": "not found"})
             n = int(self.headers.get("Content-Length") or 0)
-            if n <= 0 or n > MAX_BODY:
-                return self._json(413, {"error": "request too large"})
+            if n <= 0:
+                return self._json(400, {"error": "empty request"})
+            if n > MAX_BYTES:
+                return self._json(413, {"error": f"files up to {MAX_BYTES // (1024 * 1024)} MB, please"})
+            path = urlparse(self.path).path
+            body = self.rfile.read(n)
+
+            if path == "/api/upload":
+                if desk.can_run:
+                    return self._json(409, {"error": desk.can_run})
+                name = unquote(self.headers.get("X-Filename", "draft")).replace("/", "_").replace("\\", "_")
+                if not re.search(r"\.(pdf|docx|txt|md|markdown|tex)$", name, re.I):
+                    return self._json(400, {"error": "upload a PDF, a Word file (.docx), or plain text (.txt, .md)"})
+                return self._json(201, {"id": desk.submit(name, body).id})
+
+            if not self.headers.get("Content-Type", "").startswith("application/json"):
+                return self._json(403, {"error": "JSON only"})
             try:
-                body = json.loads(self.rfile.read(n))
+                data = json.loads(body)
             except json.JSONDecodeError:
                 return self._json(400, {"error": "invalid JSON"})
-            url = str(body.get("url", "")).strip()
-            request = str(body.get("request", "")).strip()
-            if lab.can_run:
-                return self._json(409, {"error": lab.can_run})
-            p = urlparse(url)
-            if p.scheme not in ("http", "https") or not p.netloc or len(url) > 500:
-                return self._json(400, {"error": "give a full paper link starting with https://"})
-            if len(request) > MAX_REQUEST:
-                return self._json(400, {"error": f"keep the request under {MAX_REQUEST} characters"})
-            job = lab.submit(url, request)
-            return self._json(201, {"id": job.id})
+
+            if path == "/api/paste":
+                if desk.can_run:
+                    return self._json(409, {"error": desk.can_run})
+                text = str(data.get("text", "")).strip()
+                if len(text) < 40:
+                    return self._json(400, {"error": "paste at least a few sentences"})
+                if len(text) > MAX_TEXT:
+                    return self._json(400, {"error": "that is very long; upload it as a file instead"})
+                title = re.sub(r"[^\w\- ]+", "", str(data.get("title", "")))[:60].strip() or "Pasted draft"
+                return self._json(201, {"id": desk.submit(f"{title}.txt", text.encode()).id})
+
+            m = re.fullmatch(r"/api/d/([^/]+)/(choose|style|find)", path)
+            p = self._project(m.group(1)) if m else None
+            if not p:
+                return self._json(404, {"error": "not found"})
+            action = m.group(2)
+            with desk.lock(p.id):
+                if action == "style":
+                    if data.get("style") not in STYLES:
+                        return self._json(400, {"error": "unknown style"})
+                    p.style = data["style"]
+                elif action == "choose":
+                    sid, src, on = str(data.get("sentence_id", "")), str(data.get("source_id", "")), bool(data.get("on"))
+                    allowed = {mt.source_id for mt in p.matches if mt.sentence_id == sid}
+                    if not SID.match(sid) or src not in allowed:
+                        return self._json(400, {"error": "that source was not found for this sentence"})
+                    cur = [x for x in p.chosen.get(sid, []) if x != src]
+                    p.chosen[sid] = cur + [src] if on else cur
+                    if not p.chosen[sid]:
+                        p.chosen.pop(sid)
+                elif action == "find":
+                    sid = str(data.get("sentence_id", ""))
+                    if desk.can_run:
+                        return self._json(409, {"error": desk.can_run})
+                    if not SID.match(sid) or not p.draft.sentence(sid):
+                        return self._json(400, {"error": "unknown sentence"})
+                    if desk.busy.get(p.id):
+                        return self._json(409, {"error": "still working on this draft; try again in a moment"})
+                    desk.find_more(p.id, sid)
+                p.save(desk.root)
+                return self._json(200, view(p, desk.busy.get(p.id)))
 
     return Handler
 
 
-def serve(root: Path, port: int = 8765, dry_run: bool = False) -> None:
-    from paperrepro.orchestrator import run_pipeline
+def serve(root: Path, port: int = 8765) -> None:
+    from paperrepro.env import load_dotenv
+    from paperrepro.llm import LLMError, make_llm
+    from paperrepro.pipeline import find_for_sentence, process
 
-    root.mkdir(parents=True, exist_ok=True)
-    can_run = ""
-    if dry_run:
-        from paperrepro.dryrun import DryRunLLM
+    load_dotenv()
+    can_run, llm = "", None
+    try:
+        llm = make_llm()
+    except LLMError as e:
+        can_run = f"{e}. Add the key to .env and restart `paperrepro serve`."
 
-        def runner(state: RunState) -> None:
-            run_pipeline(state, DryRunLLM(), root)
-    else:
-        from paperrepro.env import load_dotenv
-        from paperrepro.llm import LLMError, make_llm
-
-        load_dotenv()
-        try:
-            llm = make_llm()
-        except LLMError as e:
-            llm, can_run = None, f"{e}. Add the key to .env and restart `paperrepro serve`."
-
-        def runner(state: RunState) -> None:
-            run_pipeline(state, llm, root)
-
-    lab = Lab(root, runner, dry_run=dry_run, can_run=can_run)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(lab, port))
-    mode = "DRY RUN (synthetic agents)" if dry_run else ("NOT READY: " + can_run if can_run else "live")
-    print(f"PaperRepro web app: http://127.0.0.1:{port}   [{mode}]   Ctrl+C to stop")
+    desk = Desk(root,
+                process=lambda p, data, r, lock: process(p, data, llm, r, lock=lock),
+                find=lambda p, sid, r, lock: find_for_sentence(p, sid, llm, r, lock=lock),
+                can_run=can_run)
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(desk, port))
+    state = "ready" if not can_run else "NOT READY: " + can_run
+    print(f"PaperRepro: http://127.0.0.1:{port}   [{state}]   Ctrl+C to stop", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

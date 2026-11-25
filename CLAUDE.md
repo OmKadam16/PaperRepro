@@ -1,19 +1,23 @@
 # CLAUDE.md
 
-Project: PaperRepro, a multi-agent paper reproduction system. Read ARCHITECTURE.md first.
+Project: PaperRepro, a citation finder. You upload a draft; it finds published papers that back each claim and writes the citations you pick. Read ARCHITECTURE.md first.
+
+(The earlier paper-reproduction pipeline lives at git tag `reproduction-v1`.)
 
 ## Rules
-- Agent specs live in `agents/*.md` and are loaded as system prompts. Change behavior there, not by hardcoding prompts in Python.
+- Helper specs live in `agents/*.md` and are loaded as system prompts. Change behavior there, not by hardcoding prompts in Python.
 - All inter-agent data goes through typed models in `src/paperrepro/state.py`. No ad-hoc dicts.
-- Measured values come only from Executor output. Never write paper numbers into results.
-- Every agent call must be traced via `trace.py`.
-- Keep modules small; one agent per file.
+- Sources come only from scholarly database records (`tools/literature.py`). An LLM may judge a source, never create one, edit its metadata, or invent a quote.
+- Citation text and reference lists are produced by deterministic code (`cite.py`), never by an LLM.
+- Every LLM call must be traced via `trace.py`.
+- Keep modules small; one helper per file.
 - Run `pytest` and `ruff check .` before finishing a task.
 
 ## Commands
-- `uv pip install -e ".[dev]"` to install
+- `uv pip install -e ".[dev,pdf,openai]"` to install
 - `pytest -q`
-- `paperrepro run <url> --dry-run` to exercise the pipeline without an LLM key
+- `paperrepro serve` then open http://127.0.0.1:8765
+- `paperrepro cite draft.pdf` to process one file from the terminal
 
 ## Division of labor
-Claude Code owns architecture, agent logic, orchestration. Small fixes (typos, lint, simple tests) may be done by other agents; see AGENTS.md.
+Claude Code owns architecture, helper logic, the pipeline and the UI. Small fixes (typos, lint, simple tests) may be done by other agents; see AGENTS.md.

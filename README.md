@@ -1,38 +1,25 @@
 # PaperRepro
 
-A multi-agent system that **reproduces a paper's results**. Give it a bioRxiv / arXiv link; it reads the methods, finds the dataset, writes the analysis code, runs it in a sandbox, and checks its numbers against the paper's.
+**Find the published sources behind every claim in your draft.**
+
+Upload an essay or paper (PDF, Word, text; scans are read with OCR). PaperRepro marks the sentences that need a source, searches the published literature for each, and checks every match against its abstract. You see your draft on the left and the sources on the right; tick the ones you want and the citations and reference list are written for you, in Numbered, IEEE or APA style. Export to Word or copy the text.
 
 ```
 uv pip install -e ".[dev,pdf,openai]"
-echo 'OPENAI_API_KEY=sk-...' > .env                  # gitignored; or ANTHROPIC_API_KEY
-paperrepro run https://arxiv.org/abs/1612.01474      # one paper (also rebuilds the web app)
-paperrepro site                                      # web app -> runs/_site/index.html
-paperrepro report runs/<id>                          # re-render report.md from state.json
-paperrepro run <url> --dry-run                       # plumbing only, no API key
+echo 'OPENAI_API_KEY=sk-...' > .env      # gitignored
+paperrepro serve                         # then open http://127.0.0.1:8765
 ```
 
-Models are set per agent in `src/paperrepro/llm.py` and can be overridden with
-`PAPERREPRO_MODEL_<AGENT>=...` (or `PAPERREPRO_MODEL` for all agents) in `.env`.
+Optional: `SEMANTIC_SCHOLAR_API_KEY=...` in `.env` adds Semantic Scholar to the search (its keyless pool is usually rate-limited).
 
-## Web app
-`runs/_site/` is a static, offline site built from each run's `state.json` and `trace.jsonl`:
-- **the lab**: headline result, a punch card of every claim, reroute tallies, tokens per run, run ledger
-- **a run**: verdict stamp, the run's path with every reroute, a ruler per claim, the judge's notes, data, assumptions
-- **claims**: every claim from every finished run, filterable by verdict and sortable by distance from the paper
-- **crew**: each agent, its model, its calls and tokens, and its full instructions
+## What it will not do
+- Invent a paper. Every source is a real database record with a DOI or link.
+- Show a quote that is not in the paper's abstract.
+- Mark a paper as "supports" without an abstract to check it against.
 
-## Why
-Reproducibility is the bottleneck in computational science. PaperRepro turns "can I trust this result?" into a measurable, automated pipeline, with a score for every paper.
+Verdicts are an assistant's reading of abstracts. Open the paper before you rely on it.
 
-## How it works
-Orchestrator-driven pipeline of specialist agents with a verify-and-retry loop:
+## Cost
+Helpers run on `gpt-6.1-terra` ($1 / $5 per million tokens). A 10-page draft is typically a few cents to about $0.20. Change models per helper in `.env`, e.g. `PAPERREPRO_MODEL_SOURCE_JUDGE=gpt-6.2-sol`.
 
-`Ingestor -> Methods Extractor -> Data Finder -> Coder <-> Executor -> Critic -> Reporter`
-
-The Critic compares reproduced numbers to the paper's claims and routes failures back to the right agent. See [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Status
-Phase 1: runs end to end on one paper (Deep Ensembles, arXiv:1612.01474). See [PLAN.md](PLAN.md).
-
-## Eval
-Every run produces a verdict per claim (`reproduced`, `partial`, `failed`, `unverifiable`). The benchmark reports the reproduction rate across a fixed paper set. That number is the headline metric.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works and [PLAN.md](PLAN.md) for what is next.

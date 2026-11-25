@@ -1,6 +1,6 @@
 # AGENTS.md (for small fixes by any coding agent)
 
-PaperRepro: multi-agent system that reproduces paper results. Python 3.10+.
+PaperRepro: citation finder (draft in, real sources and citations out). Python 3.10+.
 
 ## Setup
 ```
@@ -16,8 +16,8 @@ pytest -q
 ## Do not
 - Do not change `agents/*.md` prompts or `ARCHITECTURE.md` without being asked.
 - Do not change the models in `src/paperrepro/state.py` without being asked (other modules depend on them).
-- Do not commit anything under `runs/`, `.env`, or API keys.
+- Do not commit anything under `projects/` or `runs/`, `.env`, or API keys.
 - Do not add dependencies without asking.
 
 ## Layout
-See ARCHITECTURE.md "Repo layout".
+See ARCHITECTURE.md "Flow".

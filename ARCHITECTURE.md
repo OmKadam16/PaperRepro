@@ -1,72 +1,41 @@
 # Architecture
 
-## Goals
-1. Reproduce quantitative claims from a paper end to end, with no human in the loop.
-2. Be honest: report `unverifiable` rather than faking a match.
-3. Be observable: every agent handoff is traced and replayable.
-4. Be measurable: a fixed benchmark gives a reproduction rate.
+## Goal
+Given a draft (essay, thesis chapter, paper), show which published papers back each claim, let the author pick, and write correct citations and a reference list. Never invent a source.
 
-## Pipeline
-
+## Flow
 ```
-          +-----------------------------------------------+
-          |                  Orchestrator                 |
-          |  state machine, budget, routing, retries      |
-          +----+--------+---------+--------+--------+-----+
-               |        |         |        |        |
-          Ingestor  Methods    Data     Coder <-> Executor
-                    Extractor  Finder       |
-                                          Critic ---> Reporter
+upload (.pdf .docx .txt .md, or pasted text)
+  -> reader       tools/reader.py     text layer; scanned PDF pages -> PNG
+  -> OCR          agents/ocr.py       LLM transcribes scanned pages verbatim
+  -> segment      tools/segment.py    paragraphs -> sentences (conservative splitter)
+  -> claim finder agents/claim_finder.py  which sentences need a source, + 2-3 search queries
+  -> literature   tools/literature.py OpenAlex (+ Semantic Scholar with a key); real records only
+  -> source judge agents/source_judge.py  supports / related / unrelated per candidate
+  -> person picks sources in the web app
+  -> cite         cite.py             markers + reference list (Numbered, IEEE, APA); .docx / text export
 ```
+`pipeline.py` runs these steps, saving `projects/<id>/project.json` after each sentence so the page can show progress live. Searching and judging run 4 sentences at a time.
 
-Flow:
-1. **Ingestor**: fetch paper (PDF/HTML), parse to structured text + tables + figure captions.
-2. **Methods Extractor**: produce a `ReproSpec`: target claims (metric, value, tolerance), datasets, preprocessing, models, hyperparameters, software versions. Flags ambiguity explicitly.
-3. **Data Finder**: resolve datasets to concrete downloadable sources (GEO, PhysioNet, Zenodo, HF, GitHub). Verifies availability and size before download.
-4. **Coder**: writes the analysis code against the `ReproSpec` and the dataset manifest. Outputs a runnable project in `runs/<id>/workspace/`.
-5. **Executor** (not an LLM): runs code in a sandbox with time/memory limits, captures stdout, stderr, artifacts, metrics JSON.
-6. **Critic**: compares measured metrics to claims. Verdict per claim. On failure, diagnoses the cause and **routes back** (fix code, re-find data, or re-read methods).
-7. **Reporter**: writes the final reproduction report (markdown + JSON).
+## Honesty rules (enforced in code, not just prompts)
+- A `Source` is built only from an API record. The judge sees candidates and may only return their ids; unknown ids are dropped.
+- A `supports` verdict needs an abstract **and** a quote that appears verbatim in it; otherwise it is downgraded to `related`, and quotes not found in the abstract are erased.
+- Only sources that survived judging are stored with the project.
+- The server refuses to cite a source for a sentence it was not found for.
+- References are formatted by `cite.py` from the stored metadata.
 
 ## State
-One `RunState` (pydantic) persisted to `runs/<id>/state.json` after every step. Resumable. Agents read and write typed fields, never free-form shared memory.
+`Project` (pydantic, `state.py`): `draft` (paragraphs -> sentences with stable ids like `p3s2`), `claims`, `sources`, `matches`, `chosen` (sentence id -> source ids), `style`. Persisted atomically.
 
-Key models (`src/paperrepro/state.py`): `Paper`, `Claim`, `ReproSpec`, `DatasetRef`, `ExecResult`, `Verdict`, `RunState`.
+## Web app
+`server.py` (stdlib `http.server`) + `app_template.html` (one page, two views):
+- **home**: drop a file or paste text; list of drafts.
+- **editor**: progress card while working; manuscript on the left with highlighted sentences; source cards on the right; tick to cite; style switch; Copy text / Download .docx.
 
-## Routing rules (Critic -> next step)
-| Diagnosis | Route to |
-|---|---|
-| Code error / crash | Coder |
-| Metric off, code looks faithful | Methods Extractor (re-read for missed detail) |
-| Data missing / wrong split | Data Finder |
-| Metric within tolerance | Reporter |
-| Retry budget exhausted | Reporter with `failed` / `partial` |
+Safety: binds 127.0.0.1; checks Host and Origin; writes need the `X-PaperRepro: 1` header; ids, sizes, file types and styles are validated; all page text is rendered with `textContent`.
 
-Global budget: max iterations, max tokens, max wall-clock. Orchestrator enforces.
-
-## Tracing
-`runs/<id>/trace.jsonl`: one event per agent call (agent, input hash, output summary, tokens, duration, route taken). A trace viewer (later) renders the handoff graph.
+## Privacy
+The draft's text goes to the LLM provider (reading, finding claims, judging). Only short keyword queries go to OpenAlex / Semantic Scholar. Drafts are stored in `projects/` (gitignored).
 
 ## LLM layer
-`llm.py` exposes one interface (`complete(system, messages, schema=None)`). Default provider: Anthropic. Swappable, so cheap models can handle cheap agents (Ingestor, Reporter) and strong models handle Coder/Critic.
-
-## Sandbox
-v1: subprocess with `resource` limits, per-run venv, no network except an allowlist during the data-fetch step. v2: Docker.
-
-## Honesty rules
-- Never copy numbers from the paper into the result.
-- Executor outputs are the only source of measured values.
-- Critic must cite the artifact path for each measured number.
-- Unreachable data or missing method details -> `unverifiable`, with the reason.
-
-## Repo layout
-```
-agents/        agent specs (.md) = system prompts, single source of truth
-src/paperrepro/
-  orchestrator.py  state.py  llm.py  trace.py  cli.py
-  agents/        one module per agent
-  tools/         pdf, fetch, sandbox
-benchmark/       papers.yaml + scoring
-runs/            per-run output (gitignored)
-tests/
-```
+`llm.py`: one `structured()` call (optional page image for OCR), OpenAI Responses API or Anthropic, one schema-validation retry, per-helper model via `PAPERREPRO_MODEL_<AGENT>`.
