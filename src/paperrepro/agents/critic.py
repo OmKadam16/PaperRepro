@@ -115,4 +115,4 @@ def run(state: RunState, llm: LLM, tracer: Tracer, root: Path | None = None) -> 
     for v in open_:
         v.diagnosis = diag.explanation
     tracer.event("critic", route=route.value, llm_route=diag.route.value, rule=rule,
-                 explanation=diag.explanation, tokens=usage.total)
+                 explanation=diag.explanation, tokens=usage.total, model=usage.model)

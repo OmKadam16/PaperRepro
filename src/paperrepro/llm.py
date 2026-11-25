@@ -39,13 +39,15 @@ def model_for(agent: str, provider_default: str) -> str:
 class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
+    model: str = ""  # which model answered; recorded in the trace
 
     @property
     def total(self) -> int:
         return self.input_tokens + self.output_tokens
 
     def __add__(self, other: Usage) -> Usage:
-        return Usage(self.input_tokens + other.input_tokens, self.output_tokens + other.output_tokens)
+        return Usage(self.input_tokens + other.input_tokens, self.output_tokens + other.output_tokens,
+                     self.model or other.model)
 
 
 class LLM(Protocol):
@@ -96,7 +98,7 @@ class OpenAILLM:
                 reasoning={"effort": effort}, max_output_tokens=64000,
             )
             fc = next((o for o in resp.output if o.type == "function_call"), None)
-            u = Usage(resp.usage.input_tokens, resp.usage.output_tokens) if resp.usage else Usage()
+            u = Usage(resp.usage.input_tokens, resp.usage.output_tokens, model) if resp.usage else Usage(model=model)
             if fc is None:
                 raise LLMError(f"{agent}: {model} returned no function call (status={resp.status}, "
                                f"incomplete={getattr(resp, 'incomplete_details', None)})")
@@ -121,13 +123,14 @@ class AnthropicLLM:
                 "input_schema": schema.model_json_schema()}
 
         def call(p: str) -> tuple[dict, Usage]:
+            model = model_for(agent, ANTHROPIC_DEFAULT)
             resp = self.client.messages.create(
-                model=model_for(agent, ANTHROPIC_DEFAULT), max_tokens=16000, system=system,
+                model=model, max_tokens=16000, system=system,
                 messages=[{"role": "user", "content": p}], tools=[tool],
                 tool_choice={"type": "tool", "name": "submit"},
             )
             block = next(b for b in resp.content if b.type == "tool_use")
-            return block.input, Usage(resp.usage.input_tokens, resp.usage.output_tokens)
+            return block.input, Usage(resp.usage.input_tokens, resp.usage.output_tokens, model)
 
         return _validate_with_retry(call, schema, prompt)
 

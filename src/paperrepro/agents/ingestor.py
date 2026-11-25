@@ -32,4 +32,4 @@ def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
     state.tokens_used += usage.total
     kept = sum(len(s.text) for s in paper.sections)
     tracer.event("ingestor", kind=doc.kind, resolved_url=doc.resolved_url, chars=len(raw),
-                 chars_kept=kept, sections=len(paper.sections), notes=notes, tokens=usage.total)
+                 chars_kept=kept, sections=len(paper.sections), notes=notes, tokens=usage.total, model=usage.model)

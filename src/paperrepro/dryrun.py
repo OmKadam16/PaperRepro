@@ -65,7 +65,7 @@ class DryRunLLM:
     def structured(self, *, agent: str, system: str, prompt: str, schema: type[T]) -> tuple[T, Usage]:
         self.calls[agent] += 1
         self.last_prompt = prompt
-        u = Usage(10, 10)
+        u = Usage(10, 10, "dry-run")
         if schema is Paper:
             return Paper(title="[DRY RUN] Example paper", sections=[Section(heading="Methods", text="...")]), u  # type: ignore[return-value]
         if schema is ReproSpec:

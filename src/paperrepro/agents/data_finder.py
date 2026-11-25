@@ -85,7 +85,7 @@ def run(state: RunState, llm: LLM, tracer: Tracer, root: Path,
         if own:
             client.close()
     state.datasets = result.items
-    tracer.event("data_finder", tokens=usage.total, datasets=[
+    tracer.event("data_finder", tokens=usage.total, model=usage.model, datasets=[
         {"name": d.name, "source": d.source, "status": d.status, "verified": d.verified,
          "size_mb": d.size_mb, "note": d.verify_note, "local_paths": d.local_paths}
         for d in result.items])

@@ -45,4 +45,4 @@ def run(state: RunState, llm: LLM, tracer: Tracer, root: Path) -> None:
         p.write_text(content)
     state.tokens_used += usage.total
     tracer.event("coder", attempt=state.attempt, files=sorted(bundle.files), rejected=rejected,
-                 tokens=usage.total)
+                 tokens=usage.total, model=usage.model)

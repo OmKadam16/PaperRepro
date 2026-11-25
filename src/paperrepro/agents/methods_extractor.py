@@ -22,4 +22,4 @@ def run(state: RunState, llm: LLM, tracer: Tracer) -> None:
     state.spec = result
     state.tokens_used += usage.total
     tracer.event("methods_extractor", claims=len(result.claims),
-                 ambiguities=len(result.ambiguities), tokens=usage.total)
+                 ambiguities=len(result.ambiguities), tokens=usage.total, model=usage.model)
