@@ -12,7 +12,17 @@ The paper-reproduction pipeline (Phase 0/1) is preserved at git tag `reproductio
 - [x] Web app: upload, live progress, manuscript + source cards, tick to cite, find sources for any sentence
 - [x] Live test in the browser: 5/5 claim sentences sourced on a sample essay, ~3 cents; landmark papers ranked first
 
+## v2: research workbench (this build)
+- [x] Multi-page app with dashboard and a process rail (gap → plan → figures → cite → review)
+- [x] Find a gap: Idea Framer, Gap Analyst, Novelty Checker; live-tested (5 gaps from 45 papers, ~$0.10)
+- [x] Plan: 5 templates, section guide, .docx outline with the research question carried from a gap
+- [x] Figures: SVG charts at journal sizes, 3 palettes, error bars, fit, log y; SVG + 300 dpi PNG; AI captions
+- [x] Review: Reviewer (6 criteria, issues tied to sentences) + exact checks; live-tested
+
 ## Next
+- [ ] Link stages into one research project (a gap study, its outline, figures and draft together)
+- [ ] Writing help inside the Plan stage: draft a section from notes, keeping the author's voice
+- [ ] Figures: box/violin plots, multi-panel figures (a, b, c), significance brackets from user-supplied tests
 - [ ] Insert citations into the person's original .docx, keeping their formatting (today the export is a clean re-typeset)
 - [ ] More styles (Chicago, Harvard, MLA) and BibTeX export
 - [ ] Open-access full text (Unpaywall / arXiv) so the judge can check beyond the abstract

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project: PaperRepro, a citation finder. You upload a draft; it finds published papers that back each claim and writes the citations you pick. Read ARCHITECTURE.md first.
+Project: PaperRepro, a research workbench in five stages: find a gap, plan, figures, cite, review. Read ARCHITECTURE.md first.
 
 (The earlier paper-reproduction pipeline lives at git tag `reproduction-v1`.)
 

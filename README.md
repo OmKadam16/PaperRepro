@@ -1,8 +1,16 @@
 # PaperRepro
 
-**Find the published sources behind every claim in your draft.**
+**A research workbench: from a rough idea to a paper you can stand behind.**
 
-Upload an essay or paper (PDF, Word, text; scans are read with OCR). PaperRepro marks the sentences that need a source, searches the published literature for each, and checks every match against its abstract. You see your draft on the left and the sources on the right; tick the ones you want and the citations and reference list are written for you, in Numbered, IEEE or APA style. Export to Word or copy the text.
+Five stages, in the order research actually happens:
+
+| Stage | What you do | AI helpers |
+|---|---|---|
+| 1 **Find a gap** | Describe an idea. Get sharp research questions, a map of the literature, and open gaps, each backed by real papers and re-checked for novelty. | Idea Framer, Gap Analyst, Novelty Checker |
+| 2 **Plan** | Pick a template (research article, conference paper, review, short communication, thesis chapter); follow a section-by-section guide; download a filled outline. | none (deterministic) |
+| 3 **Figures** | Paste data; get line, bar, scatter or error-bar charts at real journal sizes, colourblind-safe or grayscale; export SVG or 300 dpi PNG. | Caption Writer (optional) |
+| 4 **Cite** | Upload your draft; see which published papers back each sentence; tick to cite in Numbered, IEEE or APA; export Word or text. | OCR, Claim Finder, Source Judge |
+| 5 **Review** | Get a structured peer review: six scored criteria, strengths, and issues tied to sentences with concrete fixes, plus exact checks by code. | Reviewer |
 
 ```
 uv pip install -e ".[dev,pdf,openai]"
@@ -10,16 +18,15 @@ echo 'OPENAI_API_KEY=sk-...' > .env      # gitignored
 paperrepro serve                         # then open http://127.0.0.1:8765
 ```
 
-Optional: `SEMANTIC_SCHOLAR_API_KEY=...` in `.env` adds Semantic Scholar to the search (its keyless pool is usually rate-limited).
-
 ## What it will not do
-- Invent a paper. Every source is a real database record with a DOI or link.
-- Show a quote that is not in the paper's abstract.
-- Mark a paper as "supports" without an abstract to check it against.
+- Invent a paper. Every paper shown anywhere is a real OpenAlex record with a DOI or link; helpers can only refer to papers they were shown, and code drops anything else.
+- Show a quote that is not in the paper's abstract, or call a source "supports" without one.
+- Propose a gap that does not point at retrieved papers, or say a gap is filled without naming the paper.
+- Invent what your error bars mean in a caption.
 
-Verdicts are an assistant's reading of abstracts. Open the paper before you rely on it.
+Every AI output is an assistant's reading of abstracts or of your draft. Check before you rely on it.
 
 ## Cost
-Helpers run on `gpt-6.1-terra` ($1 / $5 per million tokens). A 10-page draft is typically a few cents to about $0.20. Change models per helper in `.env`, e.g. `PAPERREPRO_MODEL_SOURCE_JUDGE=gpt-6.2-sol`.
+Mechanical helpers run on `gpt-6.1-terra`; the Gap Analyst and Reviewer on `gpt-6.2-sol`. In testing: a gap study about $0.10, a review or a draft's citations a few cents. Change models per helper in `.env`, e.g. `PAPERREPRO_MODEL_REVIEWER=gpt-6.1-terra`.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works and [PLAN.md](PLAN.md) for what is next.
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [PLAN.md](PLAN.md).
